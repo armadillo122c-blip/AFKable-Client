@@ -2,11 +2,13 @@ package com.example;
 
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.text.Text;
 import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Configure the in-GUI quick-button column: toggle each on/off and drag the
@@ -27,6 +29,8 @@ public class ButtonsScreen extends FarmScreen {
 			new String[]{"tinker", "§b§lTINKER"},
 			new String[]{"smelt", "§6§lSMELT ALL"},
 			new String[]{"dominion", "§5§lAUTO DOMINION"});
+	private static final Set<String> FACTORY_UNAVAILABLE = Set.of(
+			"claude", "crystals", "eggs", "incubator", "dominion", "gear", "seeds");
 
 	private static final List<String[]> COMMANDS = List.of(
 			new String[]{"trash", "§c§lTRASH"},
@@ -61,7 +65,7 @@ public class ButtonsScreen extends FarmScreen {
 		this.parent = parent;
 	}
 
-	private List<String> order() {
+	private List<String> allOrder() {
 		List<String> order = new ArrayList<>();
 		for (String id : ForgeCalcConfig.buttonOrder.split(",")) {
 			if (!id.isBlank()) order.add(id.trim());
@@ -72,6 +76,19 @@ public class ButtonsScreen extends FarmScreen {
 		// drop ids that no longer exist so a stale config cannot desync the list
 		order.removeIf(id -> COMMANDS.stream().noneMatch(c -> c[0].equals(id)));
 		return order;
+	}
+
+	private List<String> order() {
+		return allOrder().stream().filter(this::isVisibleInCurrentMode).toList();
+	}
+
+	private boolean isVisibleInCurrentMode(String id) {
+		return !ForgeOreCalculatorClient.isFactoryMode(this.client) || !FACTORY_UNAVAILABLE.contains(id);
+	}
+
+	private List<String[]> specialsForCurrentMode() {
+		if (!ForgeOreCalculatorClient.isFactoryMode(this.client)) return SPECIALS;
+		return SPECIALS.stream().filter(row -> !FACTORY_UNAVAILABLE.contains(row[0])).toList();
 	}
 
 	private String labelFor(String id) {
@@ -90,7 +107,7 @@ public class ButtonsScreen extends FarmScreen {
 
 	private List<Row> rows() {
 		List<Row> rows = new ArrayList<>();
-		for (String[] sp : SPECIALS) {
+		for (String[] sp : specialsForCurrentMode()) {
 			rows.add(new Row(sp[0], sp[1], false));
 		}
 		for (String id : order()) {
@@ -140,6 +157,7 @@ public class ButtonsScreen extends FarmScreen {
 				px + panelW / 2, py + 8, CREAM);
 
 		List<Row> rows = rows();
+		int specialCount = specialsForCurrentMode().size();
 		int shown = 0;
 		for (Row r : rows) {
 			if (!ForgeCalcConfig.hiddenButtons.contains(r.id())) shown++;
@@ -221,13 +239,21 @@ public class ButtonsScreen extends FarmScreen {
 			if (!mouseDown) {
 				dragging = null;
 			} else {
-				List<String> newOrder = order();
-				int hoveredIndex = (mouseY - listY + scroll) / (ROW_H + ROW_GAP) - SPECIALS.size();
-				int from = newOrder.indexOf(dragging);
-				int target = Math.max(0, Math.min(newOrder.size() - 1, hoveredIndex));
+				List<String> newOrder = allOrder();
+				List<String> visibleOrder = order();
+				int hoveredIndex = (mouseY - listY + scroll) / (ROW_H + ROW_GAP) - specialCount;
+				int from = visibleOrder.indexOf(dragging);
+				int target = Math.max(0, Math.min(visibleOrder.size() - 1, hoveredIndex));
 				if (from >= 0 && target != from && search.isEmpty()) {
-					newOrder.remove(from);
-					newOrder.add(target, dragging);
+					visibleOrder = new ArrayList<>(visibleOrder);
+					visibleOrder.remove(from);
+					visibleOrder.add(target, dragging);
+					int visibleIndex = 0;
+					for (int i = 0; i < newOrder.size(); i++) {
+						if (isVisibleInCurrentMode(newOrder.get(i))) {
+							newOrder.set(i, visibleOrder.get(visibleIndex++));
+						}
+					}
 					ForgeCalcConfig.buttonOrder = String.join(",", newOrder);
 					ForgeCalcConfig.save();
 				}
@@ -255,7 +281,7 @@ public class ButtonsScreen extends FarmScreen {
 			ForgeCalcConfig.save();
 		}
 		if (drawBigButton(ctx, mouseX, mouseY, px + 18 + third * 2, by, third, 18, "§e§lRESET", null)) {
-			ForgeCalcConfig.buttonOrder = "trash,stock,claude,orebag,diary,crystals,eggs,incubator";
+			ForgeCalcConfig.buttonOrder = "trash,stock,orebag,diary,pets,forge,garden,vault,gang,prestige,ec";
 			ForgeCalcConfig.hiddenButtons.clear();
 			ForgeCalcConfig.save();
 			search = "";

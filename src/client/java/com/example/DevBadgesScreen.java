@@ -57,7 +57,7 @@ public class DevBadgesScreen extends FarmScreen {
 		if (!name.isEmpty()) {
 			String key = name.toLowerCase();
 			String current = ForgeCalcConfig.badgeMap.getOrDefault(key,
-					name.equalsIgnoreCase("Armadillo122") ? "hammer" : "star");
+					name.equalsIgnoreCase("Armadillo122") ? "creator" : "default");
 			boolean online = ForgeOreCalculatorClient.isClientUser(name);
 
 			ctx.fill(px + 12, y, px + panelW - 12, y + 30, 0x28FFFFFF);

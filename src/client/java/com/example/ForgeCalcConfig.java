@@ -28,7 +28,7 @@ public class ForgeCalcConfig {
 	public static String theme = "Farmer";
 	public static String extraButtons = "";
 	public static final java.util.Set<String> hiddenButtons = new java.util.LinkedHashSet<>();
-	public static String buttonOrder = "trash,stock,claude,orebag,diary,crystals,eggs,incubator";
+	public static String buttonOrder = "trash,stock,orebag,diary,pets,forge,garden,vault,gang,prestige,ec";
 	public static boolean clientEnabled = true;
 	public static final boolean starSync = true;
 	public static final boolean antiNuke = true;

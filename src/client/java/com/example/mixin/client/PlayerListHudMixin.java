@@ -17,10 +17,10 @@ public class PlayerListHudMixin {
 		if (!com.example.ForgeCalcConfig.clientEnabled) return;
 		String name = ForgeOreCalculatorClient.profileName(entry.getProfile());
 		String uuid = ForgeOreCalculatorClient.profileUuid(entry.getProfile());
-		String badge = ForgeOreCalculatorClient.badgePrefix(name, uuid);
+		Text badge = ForgeOreCalculatorClient.badgeTabIcon(name, uuid);
 		if (badge != null) {
 			cir.setReturnValue(Text.empty()
-					.append(Text.literal(badge))
+					.append(badge)
 					.append(cir.getReturnValue()));
 		}
 	}

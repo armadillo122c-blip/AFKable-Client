@@ -319,14 +319,22 @@ public class ForgeOreCalculatorClient implements ClientModInitializer {
 	public static String badgeKeyFor(String name, String uuid) {
 		if (uuid != null && BADGES.containsKey(uuid)) return BADGES.get(uuid);
 		if (name != null && BADGES.containsKey(name.toLowerCase())) return BADGES.get(name.toLowerCase());
-		if (isDevName(name)) return "hammer";
-		return "star";
+		if (isDevName(name)) return "creator";
+		return "default";
 	}
 
 	public static String badgePrefix(String name, String uuid) {
 		boolean isUser = (name != null && isClientUser(name)) || (uuid != null && isClientUser(uuid));
 		if (!isUser && !isDevName(name)) return null;
 		return TabBadge.byKey(badgeKeyFor(name, uuid)).listPrefix();
+	}
+
+	public static net.minecraft.text.Text badgeTabIcon(String name, String uuid) {
+		boolean isUser = (name != null && isClientUser(name)) || (uuid != null && isClientUser(uuid));
+		if (!isUser && !isDevName(name)) return null;
+		return net.minecraft.text.Text.empty()
+				.append(TabBadge.byKey(badgeKeyFor(name, uuid)).tabIcon())
+				.append(net.minecraft.text.Text.literal(" "));
 	}
 
 	public static String badgeLabel(String key) {
@@ -453,11 +461,13 @@ public class ForgeOreCalculatorClient implements ClientModInitializer {
 		// BACKEND SYNC (optional: set apiUrl in the config to a users endpoint)
 		startBackendSync();
 
-		// CHATGAME SYNC (any chat message mentioning it resets the cycle)
+		// Detect the game header in normal chat too; don't depend on a player sender.
 		try {
 			ClientReceiveMessageEvents.CHAT.register((message, signedMessage, sender, params, receptionTimestamp) -> {
 				if (!ForgeCalcConfig.clientEnabled || blocked) return;
-				captureGangChat(message.getString());
+				String raw = message.getString();
+				captureGangChat(raw);
+				ChatGameHelper.onChat(raw);
 			});
 		} catch (Throwable ignored) {
 		}
@@ -918,7 +928,7 @@ public class ForgeOreCalculatorClient implements ClientModInitializer {
 		return !Set.of("crystals", "eggs", "incubator", "dominion", "gear", "seeds", "claude").contains(id);
 	}
 
-	private boolean isFactoryMode(MinecraftClient client) {
+	static boolean isFactoryMode(MinecraftClient client) {
 		if (client == null || client.world == null) return false;
 		Scoreboard scoreboard = client.world.getScoreboard();
 		if (scoreboard == null) return false;
