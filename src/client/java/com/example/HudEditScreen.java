@@ -17,21 +17,14 @@ public class HudEditScreen extends FarmScreen {
 		SIZES.put("restock", new int[]{110, 14});
 		SIZES.put("claude", new int[]{110, 30});
 		SIZES.put("popups", new int[]{155, 26});
-		SIZES.put("buffs", new int[]{118, 50});
 		SIZES.put("chatgame", new int[]{150, 45});
 		// the forge calculator had a saved position but no editor entry, so it could
 		// never be dragged - it is the biggest panel in the mod, hence the size
-		SIZES.put("forge", new int[]{205, 164});
-		SIZES.put("incubator", new int[]{118, 62});
 		LABELS.put("restock", "§6§lRESTOCK");
 		LABELS.put("claude", "§6§lCLAUDE");
 		LABELS.put("popups", "§6§lORE POPUPS");
-		LABELS.put("buffs", "§d§lBUFFS");
 		LABELS.put("chatgame", "§e§lCHAT GAME");
-		LABELS.put("forge", "§6§lFORGE CALC");
-		LABELS.put("incubator", "§a§lINCUBATOR");
 		SIZES.put(LiveActivity.HUD_ID, new int[]{LiveActivity.panelWidth(), LiveActivity.panelHeight()});
-		LABELS.put(LiveActivity.HUD_ID, "§b§lLIVE ACTIVITY");
 	}
 
 	private final Screen parent;
@@ -193,10 +186,6 @@ public class HudEditScreen extends FarmScreen {
 			case "claude" -> {
 				ctx.drawText(this.textRenderer, Text.literal("§f78% full"), x + 5, y + 13, 0xFFFFFFFF, true);
 				ctx.fill(x + 5, y + h - 8, x + w - 5, y + h - 4, 0xFF3DDC53);
-			}
-			case "buffs" -> {
-				ctx.drawText(this.textRenderer, Text.literal("§fMoney §e1h 4m"), x + 4, y + 14, 0xFFFFFFFF, true);
-				ctx.drawText(this.textRenderer, Text.literal("§fTokens §e12m"), x + 4, y + 25, 0xFFFFFFFF, true);
 			}
 			case "chatgame" -> {
 				ctx.drawText(this.textRenderer, Text.literal("§7which command?"), x + 4, y + 14, 0xFFFFFFFF, true);

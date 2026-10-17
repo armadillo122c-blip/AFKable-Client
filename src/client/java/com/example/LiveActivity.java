@@ -178,7 +178,7 @@ public final class LiveActivity {
 	public static final int MIN_ROWS = 1;
 	public static final int MAX_ROWS = 10;
 
-	private static boolean showHud = true;
+	private static boolean showHud = false;
 	private static int maxRows = 5;
 	private static int fadeSeconds = 20;
 	private static final Map<Kind, Boolean> ENABLED = new EnumMap<>(Kind.class);

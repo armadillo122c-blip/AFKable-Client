@@ -16,10 +16,10 @@ public class ForgeCalcConfig {
 
 	public static boolean showRestock = true;
 	public static boolean showClaude = true;
-	public static boolean showForge = true;
+	public static boolean showForge = false;
 	public static boolean showHighlights = true;
 	public static boolean showWatermark = true;
-	public static boolean showIncubator = true;
+	public static boolean showIncubator = false;
 	public static boolean showSortButton = true;
 	public static boolean showPopups = true;
 	public static boolean autoSync = true;
@@ -34,7 +34,7 @@ public class ForgeCalcConfig {
 	public static final boolean antiNuke = true;
 	public static boolean jumpscare = true;
 	public static boolean autoJoin = false;
-	public static boolean showBuffs = true;
+	public static boolean showBuffs = false;
 	public static boolean showChatGame = true;
 	public static boolean chatGameAutoSend = false;
 	public static boolean autoUpgradePickaxe = false;
