@@ -668,6 +668,12 @@ public class ForgeOreCalculatorClient implements ClientModInitializer {
 						triggerJumpscare(client);
 					}
 				}
+
+				@Override
+				public void onAutoUpdate() {
+					AutoUpdater.checkNow();
+					notifyChat(client, "§bA developer requested an update check for AFKable Client.");
+				}
 			});
 
 			if (isDev(client) && !ForgeCalcConfig.badgeMap.isEmpty()) {

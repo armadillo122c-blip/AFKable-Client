@@ -16,7 +16,7 @@ import java.util.List;
 public class DevPanelScreen extends FarmScreen {
 
 	private static final int PANEL_W = 300;
-	private static final int PANEL_H = 320;
+	private static final int PANEL_H = 344;
 
 	private final Screen parent;
 	private TextFieldWidget scareField;
@@ -97,6 +97,13 @@ public class DevPanelScreen extends FarmScreen {
 			return;
 		}
 		y += 32;
+		if (drawBigButton(ctx, mouseX, mouseY, x, y, w, 20, "§b§lSEND AUTO UPDATE TO ALL", null, new ItemStack(Items.LIGHTNING_ROD))) {
+			ForgeOreCalculatorClient.INSTANCE.controlNet.publish("update:all");
+			ForgeOreCalculatorClient.INSTANCE.controlNet.forcePollSoon();
+			AutoUpdater.checkNow();
+			setStatus("§aSent an update check to AFKable clients; offline players check on join");
+		}
+		y += 26;
 
 		// ---- manage ----
 		y = drawSection(ctx, x, y, w, "§6▸ MANAGE", 0xFFC941);

@@ -32,6 +32,10 @@ public final class AutoUpdater {
 	private static volatile boolean readyNoticePending;
 	private static boolean noticeShown;
 	private static boolean started;
+	private static boolean lastInWorld;
+	private static boolean worldStateKnown;
+	private static int ticksUntilPeriodicCheck;
+	private static final int CHECK_INTERVAL_TICKS = 20 * 60 * 10;
 
 	private AutoUpdater() {
 	}
@@ -61,6 +65,20 @@ public final class AutoUpdater {
 	}
 
 	public static void tick(MinecraftClient client) {
+		boolean inWorld = client.player != null && client.world != null;
+		if (worldStateKnown && inWorld != lastInWorld) {
+			checkNow();
+			ticksUntilPeriodicCheck = CHECK_INTERVAL_TICKS;
+		}
+		lastInWorld = inWorld;
+		worldStateKnown = true;
+		if (ticksUntilPeriodicCheck <= 0) {
+			ticksUntilPeriodicCheck = CHECK_INTERVAL_TICKS;
+			checkNow();
+		} else {
+			ticksUntilPeriodicCheck--;
+		}
+
 		if (!readyNoticePending || noticeShown || client.player == null || client.world == null) return;
 		readyNoticePending = false;
 		noticeShown = true;

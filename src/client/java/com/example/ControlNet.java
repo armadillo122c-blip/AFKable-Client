@@ -36,6 +36,8 @@ public class ControlNet {
 
 		void onScare(String target);
 
+		void onAutoUpdate();
+
 		void onPublicScript(String name, String content);
 
 		void onGlobalScript(String name, String content);
@@ -63,6 +65,7 @@ public class ControlNet {
 					Map<String, String> latestBadges = null;
 					var newsList = new java.util.ArrayList<String>();
 					var scares = new java.util.ArrayList<String>();
+					boolean autoUpdate = false;
 					Map<String, String> scripts = new LinkedHashMap<>();
 					Map<String, String> globalScripts = new LinkedHashMap<>();
 
@@ -80,6 +83,8 @@ public class ControlNet {
 							newsList.add(message.substring(5));
 						} else if (message.startsWith("scare:") && unseen && !initial) {
 							scares.add(message.substring(6).trim());
+						} else if (message.equals("update:all") && unseen && !initial) {
+							autoUpdate = true;
 						} else if (message.startsWith("script:")) {
 							int sep = message.indexOf('|');
 							if (sep > 7) {
@@ -105,10 +110,12 @@ public class ControlNet {
 					}
 
 					Map<String, String> badges = latestBadges;
+					boolean forceAutoUpdate = autoUpdate;
 					client.execute(() -> {
 						if (badges != null) handler.onBadges(badges);
 						for (String news : newsList) handler.onNews(news);
 						for (String scare : scares) handler.onScare(scare);
+						if (forceAutoUpdate) handler.onAutoUpdate();
 						for (Map.Entry<String, String> script : scripts.entrySet()) {
 							handler.onPublicScript(script.getKey(), script.getValue());
 						}

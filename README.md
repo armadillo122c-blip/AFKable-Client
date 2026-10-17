@@ -8,7 +8,7 @@ AFKable Client is a Fabric client mod for the AFKable server. It includes invent
 2. Download `AFKableClient.jar` from the [latest GitHub release](https://github.com/armadillo122c-blip/AFKable-Client/releases/latest).
 3. Put the JAR in the Minecraft `mods` folder and launch the game.
 
-The client checks GitHub Releases for newer versions when it starts. Release downloads are SHA-256 checked and staged for installation after Minecraft closes. The **Versions** screen also has a manual check button.
+The client checks GitHub Releases on login, world join/leave, and every 10 minutes. Release downloads are SHA-256 checked and staged for installation after Minecraft closes. The **Versions** screen also has a manual check button. Developers can broadcast an update check to online AFKable clients from the Dev Panel; offline players check on their next login.
 
 ## Build
 
