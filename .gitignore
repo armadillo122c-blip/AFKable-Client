@@ -1,0 +1,44 @@
+build/
+.gradle/
+bin/
+out/
+run/
+*.json
+!src/main/resources/*.json
+!src/client/resources/*.json
+!fabric.mod.json
+.idea/
+*.ipr
+*.iws
+*.imb
+.vscode/
+.DS_Store
+
+# gradle
+
+classes/
+
+# eclipse
+
+*.launch
+
+# idea
+
+*.iml
+
+# vscode
+
+.settings/
+.classpath
+.project
+
+# macos
+
+*.DS_Store
+
+# java
+
+hs_err_*.log
+replay_*.log
+*.hprof
+*.jfr

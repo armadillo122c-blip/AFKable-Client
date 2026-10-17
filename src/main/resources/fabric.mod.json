@@ -1,0 +1,29 @@
+{
+	"schemaVersion": 1,
+	"id": "forge-ore-calculator",
+	"version": "${version}",
+	"name": "AFKable Client",
+	"description": "AFKABLE CLIENT by AFKartel - forge calculator, trackers, sorting and more for the AFKABLE server.",
+	"authors": ["Armadillo122", "AFKartel"],
+	"contact": { "homepage": "https://fabricmc.net/" },
+	"license": "CC0-1.0",
+	"icon": "assets/forge-ore-calculator/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [],
+		"client": [ "com.example.ForgeOreCalculatorClient" ]
+	},
+	"mixins": [
+		"forge-ore-calculator.mixins.json",
+		{
+			"config": "forge-ore-calculator.client.mixins.json",
+			"environment": "client"
+		}
+	],
+	"depends": {
+		"fabricloader": ">=0.18.2",
+		"minecraft": ">=1.21.5",
+		"java": ">=21",
+		"fabric-api": "*"
+	}
+}
