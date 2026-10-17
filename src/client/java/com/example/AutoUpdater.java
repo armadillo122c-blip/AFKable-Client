@@ -69,7 +69,10 @@ public final class AutoUpdater {
 	}
 
 	private static void checkAndDownload() throws Exception {
-		var client = java.net.http.HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(10)).build();
+		var client = java.net.http.HttpClient.newBuilder()
+				.connectTimeout(Duration.ofSeconds(10))
+				.followRedirects(java.net.http.HttpClient.Redirect.NORMAL)
+				.build();
 		var request = java.net.http.HttpRequest.newBuilder(java.net.URI.create(RELEASE_API))
 				.timeout(Duration.ofSeconds(20))
 				.header("Accept", "application/vnd.github+json")
