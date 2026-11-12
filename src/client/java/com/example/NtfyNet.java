@@ -26,6 +26,7 @@ public class NtfyNet {
 	private long backoffUntilMs = 0;
 	private String lastServer = null;
 	private boolean busy = false;
+	private boolean wasEnabled = false;
 
 	public void syncNow() {
 		tickCounter = CYCLE_TICKS - 2;
@@ -33,7 +34,14 @@ public class NtfyNet {
 	}
 
 	public void tick(MinecraftClient client) {
-		if (!ForgeCalcConfig.clientEnabled || !ForgeCalcConfig.starSync) return;
+		boolean enabled = ForgeCalcConfig.clientEnabled && ForgeCalcConfig.starSync;
+		if (!enabled) {
+			// turning Client Icons off drops everyone's icon at once, yours included
+			if (wasEnabled) ForgeOreCalculatorClient.clearClientUsers();
+			wasEnabled = false;
+			return;
+		}
+		wasEnabled = true;
 		if (client.player == null || client.world == null) {
 			lastServer = null;
 			return;

@@ -6,8 +6,17 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.KeyFactory;
+import java.security.PrivateKey;
+import java.security.PublicKey;
+import java.security.Signature;
+import java.security.spec.PKCS8EncodedKeySpec;
+import java.security.spec.X509EncodedKeySpec;
 import java.time.Duration;
-import java.util.HashMap;
+import java.util.Base64;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Locale;
@@ -16,15 +25,30 @@ import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+/**
+ * Dev-to-client announcements (news popups and tab badges) over ntfy.sh.
+ *
+ * <p>The ntfy topic is public, so anyone can post to it. Every message therefore carries an
+ * Ed25519 signature made with the dev's private key, which lives only on the dev's PC
+ * ({@code ~/.afkable-dev-key}), never in the jar. Clients hold the public key and drop anything
+ * unsigned, badly signed or older than {@link #MAX_AGE_SECONDS}. Messages can only ever show
+ * text or set badges - nothing here runs scripts or commands.
+ */
 public class ControlNet {
 
 	public static final String TOPIC = "afkable-client-ctrl-armadillo122";
+	private static final String PUBLIC_KEY = "MCowBQYDK2VwAyEA2t9CUk4YZ5PV51ufkXolZEUR/yn0dWIqot88lWxccEY=";
+	private static final Path DEV_KEY_FILE = Path.of(System.getProperty("user.home"), ".afkable-dev-key");
+	private static final long MAX_AGE_SECONDS = 12 * 60 * 60;
+	private static final long MAX_CLOCK_SKEW_SECONDS = 5 * 60;
+
 	private static final Pattern ID_PATTERN = Pattern.compile("\"id\"\\s*:\\s*\"(.*?)\"");
-	private static final Pattern MSG_PATTERN = Pattern.compile("\"message\"\\s*:\\s*\"(.*?)\"");
+	private static final Pattern MSG_PATTERN = Pattern.compile("\"message\"\\s*:\\s*\"(s1\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+)\"");
 	private static final int POLL_TICKS = 900;
 
 	private final HttpClient http = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build();
 	private final Set<String> seenIds = new HashSet<>();
+	private final PublicKey publicKey = loadPublicKey();
 	private int tickCounter = POLL_TICKS - 40;
 	private boolean firstPoll = true;
 	private boolean busy = false;
@@ -34,13 +58,6 @@ public class ControlNet {
 
 		void onBadges(Map<String, String> badges);
 
-		void onScare(String target);
-
-		void onAutoUpdate();
-
-		void onPublicScript(String name, String content);
-
-		void onGlobalScript(String name, String content);
 	}
 
 	public void tick(MinecraftClient client, Handler handler) {
@@ -64,45 +81,19 @@ public class ControlNet {
 
 					Map<String, String> latestBadges = null;
 					var newsList = new java.util.ArrayList<String>();
-					var scares = new java.util.ArrayList<String>();
-					boolean autoUpdate = false;
-					Map<String, String> scripts = new LinkedHashMap<>();
-					Map<String, String> globalScripts = new LinkedHashMap<>();
 
 					for (String line : response.body().split("\n")) {
 						Matcher idMatcher = ID_PATTERN.matcher(line);
 						Matcher msgMatcher = MSG_PATTERN.matcher(line);
 						if (!idMatcher.find() || !msgMatcher.find()) continue;
-						String id = idMatcher.group(1);
-						String message = msgMatcher.group(1).replace("\\n", "\n");
-						boolean unseen = seenIds.add(id);
+						String message = verify(msgMatcher.group(1));
+						if (message == null) continue;
+						boolean unseen = seenIds.add(idMatcher.group(1));
 
 						if (message.startsWith("badges:")) {
 							latestBadges = parseBadges(message.substring(7));
 						} else if (message.startsWith("news:") && unseen && !initial) {
 							newsList.add(message.substring(5));
-						} else if (message.startsWith("scare:") && unseen && !initial) {
-							scares.add(message.substring(6).trim());
-						} else if (message.equals("update:all") && unseen && !initial) {
-							autoUpdate = true;
-						} else if (message.startsWith("script:")) {
-							int sep = message.indexOf('|');
-							if (sep > 7) {
-								String name = message.substring(7, sep).trim()
-										.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9_-]", "");
-								if (!name.isBlank()) {
-									scripts.put(name, message.substring(sep + 1));
-								}
-							}
-						} else if (message.startsWith("global:") && unseen && !initial) {
-							int sep = message.indexOf('|');
-							if (sep > 7) {
-								String name = message.substring(7, sep).trim()
-										.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9_-]", "");
-								if (!name.isBlank()) {
-									globalScripts.put(name, message.substring(sep + 1));
-								}
-							}
 						}
 					}
 					if (seenIds.size() > 500) {
@@ -110,18 +101,9 @@ public class ControlNet {
 					}
 
 					Map<String, String> badges = latestBadges;
-					boolean forceAutoUpdate = autoUpdate;
 					client.execute(() -> {
 						if (badges != null) handler.onBadges(badges);
 						for (String news : newsList) handler.onNews(news);
-						for (String scare : scares) handler.onScare(scare);
-						if (forceAutoUpdate) handler.onAutoUpdate();
-						for (Map.Entry<String, String> script : scripts.entrySet()) {
-							handler.onPublicScript(script.getKey(), script.getValue());
-						}
-						for (Map.Entry<String, String> script : globalScripts.entrySet()) {
-							handler.onGlobalScript(script.getKey(), script.getValue());
-						}
 					});
 				});
 	}
@@ -130,32 +112,85 @@ public class ControlNet {
 		tickCounter = POLL_TICKS - 20;
 	}
 
-	public void publish(String message) {
+	/** True when this PC holds the dev signing key, so {@link #publish} can work. */
+	public static boolean canPublish() {
+		return Files.isRegularFile(DEV_KEY_FILE);
+	}
+
+	/** Signs and posts a message. Returns false (and posts nothing) without the dev key. */
+	public boolean publish(String message) {
+		String signed = sign(message);
+		if (signed == null) return false;
 		HttpRequest request = HttpRequest.newBuilder()
 				.uri(URI.create("https://ntfy.sh/" + TOPIC))
 				.timeout(Duration.ofSeconds(6))
-				.POST(HttpRequest.BodyPublishers.ofString(message))
+				.POST(HttpRequest.BodyPublishers.ofString(signed))
 				.build();
 		http.sendAsync(request, HttpResponse.BodyHandlers.discarding());
+		return true;
 	}
 
-	public void publishScript(String name, String content) {
-		String safe = content.replace("\"", "'");
-		publish("script:" + name + "|" + safe);
-	}
-
-	public void publishGlobalScript(String name, String content) {
-		String safe = content.replace("\"", "'");
-		publish("global:" + name + "|" + safe);
-	}
-
-	public void publishBadges(Map<String, String> badges) {
+	public boolean publishBadges(Map<String, String> badges) {
 		StringBuilder body = new StringBuilder("badges:");
 		for (Map.Entry<String, String> entry : badges.entrySet()) {
 			if (body.length() > 7) body.append(";");
 			body.append(entry.getKey()).append("=").append(entry.getValue());
 		}
-		publish(body.toString());
+		return publish(body.toString());
+	}
+
+	// ---------- SIGNING ----------
+
+	// Wire format: s1.<base64url(epochSeconds + "\n" + message)>.<base64url(signature)>
+	// Base64url keeps the whole thing free of characters ntfy's JSON would escape.
+
+	private static String sign(String message) {
+		try {
+			byte[] der = Base64.getDecoder().decode(Files.readString(DEV_KEY_FILE).trim());
+			PrivateKey key = KeyFactory.getInstance("Ed25519").generatePrivate(new PKCS8EncodedKeySpec(der));
+			byte[] payload = ((System.currentTimeMillis() / 1000) + "\n" + message).getBytes(StandardCharsets.UTF_8);
+			Signature signer = Signature.getInstance("Ed25519");
+			signer.initSign(key);
+			signer.update(payload);
+			Base64.Encoder b64 = Base64.getUrlEncoder().withoutPadding();
+			return "s1." + b64.encodeToString(payload) + "." + b64.encodeToString(signer.sign());
+		} catch (Exception e) {
+			return null;
+		}
+	}
+
+	/** Returns the message if the signature is good and it is fresh, else null. */
+	private String verify(String wire) {
+		if (publicKey == null) return null;
+		try {
+			String[] parts = wire.split("\\.");
+			if (parts.length != 3 || !parts[0].equals("s1")) return null;
+			Base64.Decoder b64 = Base64.getUrlDecoder();
+			byte[] payload = b64.decode(parts[1]);
+			Signature verifier = Signature.getInstance("Ed25519");
+			verifier.initVerify(publicKey);
+			verifier.update(payload);
+			if (!verifier.verify(b64.decode(parts[2]))) return null;
+
+			String text = new String(payload, StandardCharsets.UTF_8);
+			int newline = text.indexOf('\n');
+			if (newline <= 0) return null;
+			long sentAt = Long.parseLong(text.substring(0, newline));
+			long now = System.currentTimeMillis() / 1000;
+			if (sentAt < now - MAX_AGE_SECONDS || sentAt > now + MAX_CLOCK_SKEW_SECONDS) return null;
+			return text.substring(newline + 1);
+		} catch (Exception e) {
+			return null;
+		}
+	}
+
+	private static PublicKey loadPublicKey() {
+		try {
+			byte[] der = Base64.getDecoder().decode(PUBLIC_KEY);
+			return KeyFactory.getInstance("Ed25519").generatePublic(new X509EncodedKeySpec(der));
+		} catch (Exception e) {
+			return null;
+		}
 	}
 
 	private static Map<String, String> parseBadges(String raw) {

@@ -3,6 +3,7 @@ package com.example;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.text.Text;
+import net.fabricmc.loader.api.FabricLoader;
 
 import java.util.List;
 
@@ -13,6 +14,33 @@ public class DevLogsScreen extends FarmScreen {
 	}
 
 	private static final List<LogEntry> ENTRIES = List.of(
+			new LogEntry("3.21.0", "Nov 12", new String[]{
+					"+Liquid Glass look - the only theme now, with a modern layout",
+					"*Built for Mob Tycoon again - Factory NPC tools removed",
+					"+Chat game helper solves RIDDLE rounds, learns reveals and uses HINTs",
+					"+Bite Alert: ding + BITE! flash when a fish takes your hook",
+					"+Income HUD: last 5-min SUMMARY, per hour, and your rank",
+					"*Restock timer syncs from the FARMER Restocked chat line",
+					"*Money reads and shows the full ladder up to No, Dc and beyond",
+					"*Join and stock commands are only ever sent on AFKable",
+					"*Removed published and global scripts: nothing runs on your client remotely",
+					"*Dev news, badges and update pings are signed; fakes are ignored",
+					"*TAB star is now a Client Icon - opt-in (Settings), off by default",
+					"*Removed the GitHub auto-updater; download new versions yourself"}),
+			new LogEntry("3.20.8", "Oct 17", new String[]{
+					"+Augment completion repeats in chat until the next research starts",
+					"*Factory buttons and vault sorting now follow the current mode",
+					"*Removed retired ore and mining controls from settings",
+					"*Refreshed the menu, settings cards and shared button styling"}),
+			new LogEntry("3.20.7", "Oct 17", new String[]{
+					"+Augment research countdown HUD, synced from the Augments menu",
+					"*Augment timer can be moved in the HUD Editor"}),
+			new LogEntry("3.20.6", "Oct 17", new String[]{
+					"!HUD editor no longer crashes on missing labels",
+					"*Chat Game answers no longer auto-send",
+					"*Settings now keeps four clear theme choices",
+					"*Removed Activity and Info from the main menu",
+					"*Removed Stock Notifier from the menu"}),
 			new LogEntry("3.20.2", "Oct 17", new String[]{
 					"+AFKable Client logo + clean AFKableClient.jar name",
 					"+GitHub release updater, SHA-256 verified",
@@ -83,7 +111,7 @@ public class DevLogsScreen extends FarmScreen {
 					"+Player stats from afkable.com, in game",
 					"+Auto messages on a timer, with an on/off toggle",
 					"+/farm: bulk-remove your worst or best mobs",
-					"+Chat game saves answers and can send them",
+					"+Chat game saves answers for manual sending",
 					"*Quick Buttons page redone - search + scrolls right",
 					"*Removed the PV bar, stock info and FPS/ping HUDs",
 					"*Dev panel restyled"}),
@@ -194,7 +222,9 @@ public class DevLogsScreen extends FarmScreen {
 
 	/** The version shown as current, used by the menu + watermark. */
 	public static String latestVersion() {
-		return DEV_LOGS.isEmpty() ? "" : DEV_LOGS.get(0).version();
+		return FabricLoader.getInstance().getModContainer("forge-ore-calculator")
+				.map(container -> container.getMetadata().getVersion().getFriendlyString())
+				.orElseGet(() -> DEV_LOGS.isEmpty() ? "" : DEV_LOGS.get(0).version());
 	}
 
 	private final Screen parent;
@@ -206,14 +236,14 @@ public class DevLogsScreen extends FarmScreen {
 	}
 
 	private static int entryHeight(LogEntry entry) {
-		return 14 + entry.notes().length * 10 + 4;
+		return 22 + entry.notes().length * 11 + 6;
 	}
 
 	private String styleNote(String note) {
-		if (note.startsWith("!")) return "§c▪ §7" + note.substring(1);
-		if (note.startsWith("+")) return "§a▪ §7" + note.substring(1);
-		if (note.startsWith("*")) return "§e▪ §7" + note.substring(1);
-		return "§8▪ §7" + note;
+		if (note.startsWith("!")) return "§c! §7" + note.substring(1);
+		if (note.startsWith("+")) return "§a+ §7" + note.substring(1);
+		if (note.startsWith("*")) return "§e• §7" + note.substring(1);
+		return "§8• §7" + note;
 	}
 
 	@Override
@@ -222,21 +252,34 @@ public class DevLogsScreen extends FarmScreen {
 		drawThemeBackdrop(ctx);
 		updateMouse();
 
-		int panelW = 290;
-		int panelH = 236;
+		int panelW = Math.min(420, this.width - 24);
+		int panelH = Math.min(300, this.height - 24);
 		int px = this.width / 2 - panelW / 2;
 		int py = this.height / 2 - panelH / 2;
 
 		drawWoodPanel(ctx, px, py, panelW, panelH);
-		ctx.fill(px, py, px + panelW, py + 22, PLANK_DARK);
-		ctx.fill(px, py + 22, px + panelW, py + 23, FRAME_DARK);
-		ctx.drawCenteredTextWithShadow(this.textRenderer, TextFx.gradient("DEV LOGS", ForgeCalcTheme.current().gradFrom, ForgeCalcTheme.current().gradTo), px + panelW / 2, py + 7, CREAM);
-		ctx.drawText(this.textRenderer, Text.literal("§c▪§8fix §a▪§8new §e▪§8tweak"), px + 12, py + 26, 0xFFFFFFFF, true);
+		ctx.fillGradient(px, py, px + panelW, py + 30, PLANK_DARK, blend(PLANK_DARK, 0xFF000000, 0.25f));
+		ctx.fill(px, py + 30, px + panelW, py + 31, ForgeCalcTheme.current().accent);
+		ctx.drawText(this.textRenderer,
+				TextFx.gradient("DEV LOGS", ForgeCalcTheme.current().gradFrom, ForgeCalcTheme.current().gradTo),
+				px + 14, py + 7, CREAM, true);
+		ctx.drawText(this.textRenderer, Text.literal("§7Updates, fixes and improvements"), px + 14, py + 18, 0xFFFFFFFF, true);
+		String currentVersion = "v" + latestVersion();
+		int versionW = this.textRenderer.getWidth(currentVersion) + 14;
+		ctx.fill(px + panelW - versionW - 12, py + 7, px + panelW - 12, py + 23, 0x403DDC53);
+		ctx.drawCenteredTextWithShadow(this.textRenderer, Text.literal("§a§l" + currentVersion),
+				px + panelW - versionW / 2 - 12, py + 11, 0xFFFFFFFF);
+
+		int legendY = py + 37;
+		ctx.fill(px + 12, legendY, px + panelW - 12, legendY + 14, 0x30000000);
+		ctx.drawText(this.textRenderer, Text.literal("§c! §7FIXES"), px + 18, legendY + 3, 0xFFFFFFFF, true);
+		ctx.drawText(this.textRenderer, Text.literal("§a+ §7NEW"), px + 86, legendY + 3, 0xFFFFFFFF, true);
+		ctx.drawText(this.textRenderer, Text.literal("§e• §7TWEAKS"), px + 146, legendY + 3, 0xFFFFFFFF, true);
 
 		int listX = px + 12;
-		int listY = py + 37;
-		int listW = panelW - 34;
-		int listH = panelH - 67;
+		int listY = py + 57;
+		int listW = panelW - 30;
+		int listH = panelH - 88;
 
 		// pixel-based scrolling so the last entry can always be reached in full
 		int contentH = 0;
@@ -244,7 +287,7 @@ public class DevLogsScreen extends FarmScreen {
 			contentH += entryHeight(entry) + 3;
 		}
 		int maxScroll = Math.max(0, contentH - listH);
-		scroll = Math.max(0, Math.min(maxScroll, scroll - pollScroll() * 14));
+		scroll = Math.max(0, Math.min(maxScroll, scroll - pollScroll() * 18));
 
 		ctx.enableScissor(listX, listY, listX + listW + 4, listY + listH);
 		int entryY = listY - scroll;
@@ -252,37 +295,44 @@ public class DevLogsScreen extends FarmScreen {
 			LogEntry entry = DEV_LOGS.get(i);
 			int entryH = entryHeight(entry);
 			if (entryY + entryH >= listY && entryY <= listY + listH) {
-				ctx.fill(listX, entryY, listX + listW, entryY + entryH - 2, 0x28FFFFFF);
-				ctx.fill(listX, entryY, listX + 2, entryY + entryH - 2, ForgeCalcTheme.current().accent);
-				String tag = i == 0 ? " §a(LATEST)" : "";
-				ctx.drawText(this.textRenderer,
-						Text.literal("§f§lv" + entry.version() + tag + "  §8" + entry.date()),
-						listX + 6, entryY + 3, 0xFFFFFFFF, true);
-				int noteY = entryY + 14;
+				ctx.fillGradient(listX, entryY, listX + listW, entryY + entryH - 2,
+						0x50202020, 0x30101010);
+				ctx.fill(listX, entryY, listX + 3, entryY + entryH - 2,
+						i == 0 ? ForgeCalcTheme.current().accent : 0x705D574B);
+				ctx.drawText(this.textRenderer, Text.literal("§f§lv" + entry.version()),
+						listX + 9, entryY + 5, 0xFFFFFFFF, true);
+				if (i == 0) {
+					ctx.fill(listX + 48, entryY + 4, listX + 91, entryY + 15, 0x503DDC53);
+					ctx.drawCenteredTextWithShadow(this.textRenderer, Text.literal("§aLATEST"), listX + 69, entryY + 6, 0xFFFFFFFF);
+				}
+				int dateWidth = this.textRenderer.getWidth(entry.date());
+				ctx.drawText(this.textRenderer, Text.literal("§8" + entry.date()),
+						listX + listW - dateWidth - 8, entryY + 5, 0xFFFFFFFF, true);
+				int noteY = entryY + 20;
 				for (String note : entry.notes()) {
-					ctx.drawText(this.textRenderer, Text.literal(styleNote(note)), listX + 8, noteY, 0xFFFFFFFF, true);
-					noteY += 10;
+					ctx.drawText(this.textRenderer, Text.literal(styleNote(note)), listX + 10, noteY, 0xFFFFFFFF, true);
+					noteY += 11;
 				}
 			}
 			entryY += entryH + 3;
 		}
 		ctx.disableScissor();
 
-		int trackX = px + panelW - 9;
+		int trackX = px + panelW - 8;
 		ctx.fill(trackX, listY, trackX + 3, listY + listH, 0x50000000);
 		if (maxScroll > 0) {
 			int thumbH = Math.max(14, listH * listH / Math.max(1, contentH));
 			int thumbY = listY + (listH - thumbH) * scroll / maxScroll;
-			ctx.fill(trackX, thumbY, trackX + 3, thumbY + thumbH, GREEN);
+			ctx.fill(trackX, thumbY, trackX + 3, thumbY + thumbH, ForgeCalcTheme.current().accent);
 		}
 
 		int half = (panelW - 30) / 2;
-		if (drawBigButton(ctx, mouseX, mouseY, px + 12, py + panelH - 24, half, 18, "§f§lBACK", null)) {
+		if (drawBigButton(ctx, mouseX, mouseY, px + 12, py + panelH - 25, half, 18, "§f§lBACK", null)) {
 			close();
 			return;
 		}
 		// versions moved here off the main menu, next to the changelog it belongs with
-		if (drawBigButton(ctx, mouseX, mouseY, px + 18 + half, py + panelH - 24, half, 18, "§b§lVERSIONS", null)) {
+		if (drawBigButton(ctx, mouseX, mouseY, px + 18 + half, py + panelH - 25, half, 18, "§b§lVERSIONS", null)) {
 			this.client.setScreen(new VersionsScreen(this));
 		}
 	}

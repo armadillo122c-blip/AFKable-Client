@@ -150,26 +150,6 @@ public class ScriptScreen extends FarmScreen {
 		}
 
 		// line ops
-		boolean isDev = mc != null && mc.player != null
-				&& ForgeOreCalculatorClient.isDev(mc);
-		if (isDev && selectedFile >= 0) {
-			if (drawBigButton(ctx, mouseX, mouseY, px + panelW - 66, py + 172, 56, 14, "§d§lPUBLISH", null)) {
-				if (ForgeOreCalculatorClient.INSTANCE != null) {
-					String name = scripts.get(selectedFile).getFileName().toString()
-							.replace(".txt", "").replace("public_", "").replace("global_", "");
-					ForgeOreCalculatorClient.INSTANCE.controlNet.publishScript(name, String.join("\n", lines));
-					status = "§aPublished §f" + name + " §7- users can run it (within ~45s)";
-				}
-			}
-			if (drawBigButton(ctx, mouseX, mouseY, px + panelW - 130, py + 172, 60, 14, "§4§lGLOBAL RUN", null)) {
-				if (ForgeOreCalculatorClient.INSTANCE != null) {
-					String name = scripts.get(selectedFile).getFileName().toString()
-							.replace(".txt", "").replace("public_", "").replace("global_", "");
-					ForgeOreCalculatorClient.INSTANCE.controlNet.publishGlobalScript(name, String.join("\n", lines));
-					status = "§cGLOBAL: §f" + name + " §7will AUTO-RUN on everyone (~45s)";
-				}
-			}
-		}
 		if (selectedFile >= 0) {
 			if (drawBigButton(ctx, mouseX, mouseY, px + 10, py + 172, 42, 14, "§a+LINE", null)) {
 				int at = selectedLine >= 0 ? selectedLine + 1 : lines.size();

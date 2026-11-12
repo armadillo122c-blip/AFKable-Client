@@ -12,7 +12,7 @@ import java.util.Arrays;
 public enum TabBadge {
 	CREATOR("creator", "♛", "§6", "Creator", "Creator", '\uE000'),
 	PLUS("plus", "✚", "§b", "Plus", "Plus", '\uE001'),
-	DEFAULT("default", "●", "§7", "Default", "Player", '\uE002');
+	DEFAULT("default", "●", "§b", "Default", "Player", '');
 
 	private final String key;
 	private final String icon;

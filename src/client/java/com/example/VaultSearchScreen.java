@@ -17,11 +17,20 @@ public class VaultSearchScreen extends FarmScreen {
 		this.parent = parent;
 	}
 
+	private SortManager.Mode[] categoryModes() {
+		return new SortManager.Mode[]{SortManager.Mode.MOBS, SortManager.Mode.POTIONS,
+				SortManager.Mode.CRYSTALS, SortManager.Mode.TIME};
+	}
+
+	private int panelHeight() {
+		return Math.min(262, 143 + categoryModes().length * 21);
+	}
+
 	@Override
 	protected void init() {
 		int panelW = 220;
 		int px = this.width / 2 - panelW / 2;
-		int py = this.height / 2 - 122;
+		int py = this.height / 2 - panelHeight() / 2;
 		// resize recreates widgets, so carry the typed text across
 		String previousText = searchField != null ? searchField.getText() : "";
 		searchField = new TextFieldWidget(this.textRenderer, px + 12, py + 40, panelW - 24, 13, Text.literal(""));
@@ -51,9 +60,9 @@ public class VaultSearchScreen extends FarmScreen {
 		updateMouse();
 
 		int panelW = 220;
-		int panelH = 262;
+		int panelH = panelHeight();
 		int px = this.width / 2 - panelW / 2;
-		int py = this.height / 2 - 122;
+		int py = this.height / 2 - panelH / 2;
 
 		drawWoodPanel(ctx, px, py, panelW, panelH);
 		ctx.fill(px, py, px + panelW, py + 22, PLANK_DARK);
@@ -79,9 +88,8 @@ public class VaultSearchScreen extends FarmScreen {
 		ctx.drawText(this.textRenderer, Text.literal("§7Or by §fcategory§7:"), px + 12, py + 78, 0xFFFFFFFF, true);
 		int y = py + 89;
 		int w = panelW - 24;
-		SortManager.Mode[] modes = {SortManager.Mode.ORES, SortManager.Mode.MOBS, SortManager.Mode.POTIONS,
-				SortManager.Mode.CRYSTALS, SortManager.Mode.TIME};
-		String[] labels = {"§bOres", "§aMobs", "§dPotions", "§5Crystals", "§eTime Mach"};
+		SortManager.Mode[] modes = categoryModes();
+		String[] labels = new String[]{"§aMobs", "§dPotions", "§5Crystals", "§eTime Mach"};
 
 		for (int i = 0; i < modes.length; i++) {
 			ctx.drawText(this.textRenderer, Text.literal("§f" + labels[i].substring(2)), px + 14, y + 5, 0xFFFFFFFF, true);

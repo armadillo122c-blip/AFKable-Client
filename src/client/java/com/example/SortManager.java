@@ -20,7 +20,6 @@ public class SortManager {
 
 	public enum Mode {
 		ALL("All"),
-		ORES("Ores"),
 		MOBS("Mobs"),
 		POTIONS("Potions"),
 		CRYSTALS("Crystals"),
@@ -49,7 +48,6 @@ public class SortManager {
 
 	private static final Pattern BOOST_PATTERN = Pattern.compile("(?:Boost:\\s*)?([\\d.]+)x");
 	private static final Pattern SIZE_PATTERN = Pattern.compile("(?i)Size:\\s*\\[?([a-z]+)\\]?");
-	private static final Pattern NPC_DAMAGE_PATTERN = Pattern.compile("(?i)damage:\\s*([\\d.,]+)\\s*([a-z]*)");
 	private static final Pattern POWER_PATTERN = Pattern.compile("Power:\\s*[\\d.]+%\\s*-\\s*([\\d.]+)%");
 	private static final Pattern GENERATE_PATTERN = Pattern.compile("Generate:\\s*(?:(\\d+)h)?\\s*(?:(\\d+)m)?\\s*(?:(\\d+)s)?");
 
@@ -219,7 +217,6 @@ public class SortManager {
 	private boolean matchesMode(ItemStack stack) {
 		return switch (mode) {
 			case ALL -> categoryIndex(stack) >= 0;
-			case ORES -> OreData.find(stack.getName().getString()) != null;
 			case MOBS -> mobSize(stack) > 0;
 			case POTIONS -> boostValue(stack) > 0;
 			case CRYSTALS -> crystalValue(stack) > 0;
@@ -231,15 +228,8 @@ public class SortManager {
 		return switch (mode) {
 			case ALL -> Comparator.comparingInt(SortManager::categoryIndex)
 					.thenComparing(Comparator.comparingDouble(SortManager::categoryValue).reversed());
-			case ORES -> Comparator.comparingDouble(SortManager::oreValue).reversed();
-			case MOBS -> Comparator.<ItemStack>comparingInt(stack -> isFactoryNpc(stack) ? 0 : 1)
-					.thenComparing((a, b) -> {
-						if (isFactoryNpc(a) && isFactoryNpc(b)) {
-							return Double.compare(npcDamage(b), npcDamage(a));
-						}
-						return Comparator.comparingDouble(SortManager::mobSize)
-								.thenComparingInt(SortManager::rarityIndex).reversed().compare(a, b);
-					});
+			case MOBS -> Comparator.comparingDouble(SortManager::mobSize)
+					.thenComparingInt(SortManager::rarityIndex).reversed();
 			case POTIONS -> Comparator.comparingDouble(SortManager::boostValue).reversed();
 			case CRYSTALS -> Comparator.comparingDouble(SortManager::crystalValue).reversed();
 			case TIME -> Comparator.comparingDouble(SortManager::timeValue).reversed();
@@ -247,33 +237,24 @@ public class SortManager {
 	}
 
 	static int categoryIndex(ItemStack stack) {
-		if (OreData.find(stack.getName().getString()) != null) return 0;
-		if (isFactoryNpc(stack) || mobSize(stack) > 0) return 1;
-		if (boostValue(stack) > 0) return 2;
-		if (crystalValue(stack) > 0) return 3;
-		if (timeValue(stack) > 0) return 4;
+		if (mobSize(stack) > 0) return 0;
+		if (boostValue(stack) > 0) return 1;
+		if (crystalValue(stack) > 0) return 2;
+		if (timeValue(stack) > 0) return 3;
 		return -1;
 	}
 
 	static double categoryValue(ItemStack stack) {
 		return switch (categoryIndex(stack)) {
-			case 0 -> oreValue(stack);
-			case 1 -> isFactoryNpc(stack) ? npcDamage(stack) : mobSize(stack) * 1000 + Math.max(0, rarityIndex(stack));
-			case 2 -> boostValue(stack);
-			case 3 -> crystalValue(stack);
-			case 4 -> timeValue(stack);
+			case 0 -> mobSize(stack) * 1000 + Math.max(0, rarityIndex(stack));
+			case 1 -> boostValue(stack);
+			case 2 -> crystalValue(stack);
+			case 3 -> timeValue(stack);
 			default -> 0;
 		};
 	}
 
 	// ---------- ITEM ANALYSIS ----------
-
-	private static double oreValue(ItemStack stack) {
-		String name = stack.getName().getString();
-		OreData ore = OreData.find(name);
-		if (ore == null) return -1;
-		return ore.value() * OreData.findVariant(name).bonus;
-	}
 
 	// maps the server's small-caps display font back to ascii so "ᴛɪᴛᴀɴɪᴄ" parses as "titanic"
 	private static final String SMALL_CAPS = "ᴀʙᴄᴅᴇꜰɢʜɪᴊᴋʟᴍɴᴏᴘǫʀꜱᴛᴜᴠᴡxʏᴢ";
@@ -305,7 +286,6 @@ public class SortManager {
 				if (size != null) return size;
 			}
 		}
-		if (isFactoryNpc(stack)) return 999.0;
 		boolean isMob = false;
 		for (String line : loreLines(stack)) {
 			String lower = normalizeText(line).toLowerCase();
@@ -316,43 +296,6 @@ public class SortManager {
 		}
 		// mob with unreadable size: PROTECT it - never risk a Titanic
 		return isMob ? 999.0 : -1;
-	}
-
-	static boolean isFactoryNpc(ItemStack stack) {
-		if (stack == null || stack.isEmpty()) return false;
-		if (normalizeText(stack.getName().getString()).toLowerCase(Locale.ROOT).contains("[npc]")) return true;
-		for (String line : loreLines(stack)) {
-			String lower = normalizeText(line).toLowerCase(Locale.ROOT);
-			if (lower.contains("factory miner") || lower.contains("factory npc")) return true;
-		}
-		return false;
-	}
-
-	static double npcDamage(ItemStack stack) {
-		if (!isFactoryNpc(stack)) return -1;
-		for (String line : loreLines(stack)) {
-			Matcher m = NPC_DAMAGE_PATTERN.matcher(normalizeText(line));
-			if (!m.find()) continue;
-			try {
-				double value = Double.parseDouble(m.group(1).replace(",", ""));
-				String suffix = m.group(2).toLowerCase(Locale.ROOT);
-				double multiplier = switch (suffix) {
-					case "k" -> 1e3;
-					case "m" -> 1e6;
-					case "b" -> 1e9;
-					case "t" -> 1e12;
-					case "qa" -> 1e15;
-					case "qi" -> 1e18;
-					case "sx" -> 1e21;
-					case "sp" -> 1e24;
-					default -> suffix.isEmpty() ? 1 : -1;
-				};
-				return multiplier < 0 ? -1 : value * multiplier;
-			} catch (NumberFormatException ignored) {
-				return -1;
-			}
-		}
-		return -1;
 	}
 
 	private static int rarityIndex(ItemStack stack) {
@@ -478,14 +421,6 @@ public class SortManager {
 
 	public static boolean isTrashable(ItemStack stack) {
 		String name = stack.getName().getString();
-		if (isFactoryNpc(stack)) {
-			if (!ForgeCalcConfig.trashMobs || !ForgeCalcConfig.trashFactoryNpcs) return false;
-			double damage = npcDamage(stack);
-			// Unknown NPC damage is always protected, and 0 disables NPC trashing.
-			return damage >= 0 && ForgeCalcConfig.trashNpcMaxDamage > 0
-					&& damage < ForgeCalcConfig.trashNpcMaxDamage;
-		}
-
 		// mobs first: a mob named "Iron Golem" must never be treated as Iron ore
 		double size = mobSize(stack);
 		if (size > 0) {
@@ -496,11 +431,7 @@ public class SortManager {
 		}
 
 		OreData ore = OreData.find(name);
-		if (ore != null) {
-			if (!ForgeCalcConfig.trashOres) return false;
-			double value = ore.value() * OreData.findVariant(name).bonus;
-			return value < ForgeCalcConfig.trashOreMax;
-		}
+		if (ore != null) return false;
 
 		return ForgeCalcConfig.trashOther;
 	}

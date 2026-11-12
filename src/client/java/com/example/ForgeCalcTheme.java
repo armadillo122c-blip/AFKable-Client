@@ -95,6 +95,10 @@ public enum ForgeCalcTheme {
 	COLOR("Color", 1,
 			0xFF120018, 0xFF2B1046, 0xFF3F1A66, 0xFF1A0A2C, 0xFFFF4FD8,
 			0xFF00E5FF, 0xFF0090B8, 0xE8150726, 0xFFFF4FD8, 0xFF2E88, 0x2EE8FF),
+	// Frosted see-through panels over the blurred game. Colours carry their own alpha.
+	GLASS("Liquid Glass", 0,
+			0x33FFFFFF, 0x5A0E1420, 0x2EFFFFFF, 0x22FFFFFF, 0x55FFFFFF,
+			0xFF8FD3FF, 0xFF4A90D9, 0x8C0B111C, 0x45FFFFFF, 0xFFFFFF, 0x9FD8FF),
 	CUSTOM("Custom", 0,
 			0xFF1C1410, 0xFF9C7440, 0xFFB08A4F, 0xFF7A5A30, 0xFF4A3319,
 			0xFF6FBF4A, 0xFF3F7A2A, 0xD8241A10, 0xFF4A3319, 0xFFC941, 0xFF7B2E);
@@ -118,10 +122,11 @@ public enum ForgeCalcTheme {
 	public int panelStyle() {
 		if (this == CUSTOM) return customPanelStyle;
 		return switch (this) {
-			case HACKER, DARK, CAR, ANGRY_BIRDS, CURSED, CODER, AFKABLE, COLOR -> 1;
+			case DEFAULT, FARMER, HACKER, DARK, LIGHT, CAR, ANGRY_BIRDS, CURSED, CODER, AFKABLE, COLOR -> 1;
 			case CHERRY, KITAGAWA, SLIME, CLAUDE -> 2;
 			case SPACE, MOON, ALPHA_WOLF, BLOOD, BLACKHOLE, GALAXY, MINING, NEJI, NOLIFE, BINGO -> 3;
 			case EARTH -> 2;
+			case GLASS -> 4;
 			default -> 0;
 		};
 	}
@@ -170,7 +175,7 @@ public enum ForgeCalcTheme {
 		};
 	}
 
-	private static ForgeCalcTheme current = FARMER;
+	private static ForgeCalcTheme current = GLASS;
 
 	public static ForgeCalcTheme current() {
 		return current;
@@ -204,26 +209,17 @@ public enum ForgeCalcTheme {
 		activate(CUSTOM);
 	}
 
+	/** Liquid Glass is the only look now; any saved theme name resolves to it. */
 	public static void set(String name) {
-		if (name != null && name.startsWith("custom:")) {
-			CustomTheme custom = CustomTheme.load(name.substring(7));
-			if (custom != null) {
-				custom.applyTo();
-				activate(CUSTOM);
-				return;
-			}
-		}
-		for (ForgeCalcTheme theme : values()) {
-			if (theme.name().equalsIgnoreCase(name) || theme.label.equalsIgnoreCase(name)) {
-				activate(theme);
-				return;
-			}
-		}
-		activate(FARMER);
+		activate(GLASS);
 	}
 
 	public ForgeCalcTheme next() {
-		ForgeCalcTheme next = values()[(ordinal() + 1) % values().length];
-		return next == CUSTOM ? values()[0] : next;
+		return GLASS;
+	}
+
+	/** True while the Liquid Glass theme is active. */
+	public static boolean glass() {
+		return current == GLASS;
 	}
 }

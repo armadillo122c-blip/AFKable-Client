@@ -1,7 +1,6 @@
 package com.example;
 
 import net.fabricmc.loader.api.FabricLoader;
-import net.minecraft.client.MinecraftClient;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -46,15 +45,15 @@ import java.util.regex.Pattern;
  *
  * Everything it sees is remembered: when the server announces the winner and the
  * answer ("someone got it - OBSIDIAN!"), that prompt/answer pair is written to disk, so
- * the same question is answered instantly next time. With auto-send on it types the
- * answer for you.
+ * the same question is answered instantly next time. The helper only displays answers;
+ * the player sends them manually.
  */
 public class ChatGameHelper {
 
 	// ---------- round framing ----------
 
 	/** Named game headers. Matched case-insensitively anywhere in the line. */
-	private static final String[] GAME_HEADERS = {"CHAT GAME", "HEAD SCRATCHER", "BRAIN BLAST"};
+	private static final String[] GAME_HEADERS = {"CHAT GAME", "HEAD SCRATCHER", "BRAIN BLAST", "RIDDLE"};
 
 	/** Trailing per-round id, e.g. "... 6 x 9 + 3 #7746". */
 	private static final Pattern ROUND_ID = Pattern.compile("\\s*#(\\d{2,10})\\s*[!.?]*\\s*$");
@@ -76,8 +75,7 @@ public class ChatGameHelper {
 	 *
 	 * <p>The bare phrase "correct answer" used to be enough, which meant the round-opening
 	 * stake line "First correct answer wins 2 CREDITS!" was read as a reveal and taught the
-	 * answer book that the answer was literally "wins 2 CREDITS". With auto-send on, the very
-	 * next round would have typed that into public chat. A reveal now has to be introduced by
+	 * answer book that the answer was literally "wins 2 CREDITS". A reveal now has to be introduced by
 	 * a separator or a past-tense verb, and {@link #looksLikePrize} rejects anything that is
 	 * really a payout.
 	 */
@@ -87,6 +85,87 @@ public class ChatGameHelper {
 					+ "\\s*[:\\-\\u2013]?\\s*([A-Za-z0-9 ']{1,32})");
 
 	/** Words that mean "this is the prize", not "this is the answer". */
+	/** Riddle reveal on its own line after "RIDDLE · nobody got it": "It was BOOK". */
+	private static final Pattern IT_WAS = Pattern.compile("(?i)^\\s*it\\s+was\\s+([A-Za-z0-9 ']{1,32})[!.]?\\s*$");
+
+	/** "HINT · a__": known letters with underscores for the missing ones. */
+	private static final Pattern HINT_LINE = Pattern.compile("(?i)^\\s*hint\\b[^A-Za-z_]*([A-Za-z_][A-Za-z_ ]{1,30})\\s*$");
+
+	/**
+	 * Common riddles, matched by a distinctive phrase in the question (AFKable words them its
+	 * own way, so exact text can't be keyed). Anything not here is learned from the reveal.
+	 */
+	private static final String[][] RIDDLES = {
+			{"go up but never come down", "age"},
+			{"keys but can t open", "piano"},
+			{"neck but no head", "bottle"},
+			{"more you take the more you leave behind", "footsteps"},
+			{"hands but can t clap", "clock"},
+			{"full of holes but", "sponge"},
+			{"wetter the more it dries", "towel"},
+			{"broken before you can use", "egg"},
+			{"one eye but can t see", "needle"},
+			{"spine but no bones", "book"},
+			{"pages", "book"},
+			{"legs but doesn t walk", "table"},
+			{"legs but can t walk", "table"},
+			{"around the world while staying in a corner", "stamp"},
+			{"head and a tail but no body", "coin"},
+			{"more of it there is the less you see", "darkness"},
+			{"more of this there is the less you see", "darkness"},
+			{"up and down but doesn t move", "stairs"},
+			{"teeth but can t bite", "comb"},
+			{"belongs to you but other people use it", "name"},
+			{"cracked made told and played", "joke"},
+			{"thumb and four fingers", "glove"},
+			{"bed but never sleeps", "river"},
+			{"runs but never walks", "river"},
+			{"if you have me you want to share me", "secret"},
+			{"cities but no houses", "map"},
+			{"catch but not throw", "cold"},
+			{"ring but no finger", "phone"},
+			{"branches but no fruit", "bank"},
+			{"once in a minute twice in a moment", "m"},
+			{"always in front of you but can t be seen", "future"},
+			{"gets bigger the more you take away", "hole"},
+			{"heavier forward than backward", "ton"},
+			{"break it by saying its name", "silence"},
+			{"say my name and i disappear", "silence"},
+			{"eyes but can t see", "potato"},
+			{"tail and a head but no body", "coin"},
+			{"face and two hands", "clock"},
+			{"fly without wings", "time"},
+			{"you can hold it without touching", "breath"},
+			{"made of water but if you put it into water it will die", "ice"},
+	};
+
+	/** The seeded answer whose phrase appears in this riddle, or null. */
+	public static String riddleAnswer(String puzzle) {
+		String k = key(puzzle);
+		for (String[] riddle : RIDDLES) {
+			if (k.contains(riddle[0])) return riddle[1];
+		}
+		return null;
+	}
+
+	/** Best known word fitting a hint like "a__" (riddle answers first, then the word book). */
+	public static String hintMatch(String hint) {
+		String pattern = hint.toLowerCase(Locale.ROOT).replace(" ", "");
+		if (!pattern.matches("[a-z_]{2,30}") || !pattern.contains("_")) return null;
+		Pattern fit = Pattern.compile(pattern.replace("_", "[a-z]"));
+		for (String[] riddle : RIDDLES) {
+			if (fit.matcher(riddle[1]).matches()) return riddle[1];
+		}
+		for (String answer : ANSWER_BOOK.values()) {
+			String a = answer.toLowerCase(Locale.ROOT);
+			if (fit.matcher(a).matches()) return a;
+		}
+		for (String word : WORD_BOOK) {
+			if (fit.matcher(word).matches()) return word;
+		}
+		return null;
+	}
+
 	private static final Pattern PRIZE_WORDS = Pattern.compile(
 			"(?i)\\b(?:wins?|won|award(?:ed)?|receives?|earns?|credits?|tokens?|coins?|gems?|"
 					+ "points?|prize|reward)\\b");
@@ -126,17 +205,12 @@ public class ChatGameHelper {
 	private static long shownUntil = 0;
 	private static long roundStartedAt = 0;
 	private static boolean gameActive = false;
-	private static boolean sentThisRound = false;
 
 	/** Learned prompt -> answer pairs, persisted between sessions. */
 	private static final Map<String, String> ANSWER_BOOK = new LinkedHashMap<>();
 	/** Every word we know as a possible unscramble answer (seeds + learned). */
 	private static final Set<String> WORD_BOOK = new LinkedHashSet<>();
 	private static boolean loaded = false;
-
-	public static String sendKeyName() {
-		return "ENTER";
-	}
 
 	// ---------- built-in word book ----------
 
@@ -365,6 +439,19 @@ public class ChatGameHelper {
 		if (!looksLikePrompt) return;
 		// pure decoration lines ("▬▬▬▬") are not puzzles
 		if (text.replaceAll("[^A-Za-z0-9]", "").length() < 2) return;
+		// "Prize: $4.9B · 60s to answer" belongs to the round, it is never the question
+		if (lower.startsWith("prize")) return;
+		// "HINT · a__" narrows an unsolved round down to a word we know
+		Matcher hintLine = HINT_LINE.matcher(text);
+		if (hintLine.find()) {
+			if (suggestedAnswer.isEmpty() || suggestedAnswer.startsWith("§7")) {
+				String guess = hintMatch(hintLine.group(1));
+				if (guess != null) {
+					set(rawPrompt.isEmpty() ? "Hint: " + hintLine.group(1) : shorten(rawPrompt), guess.toUpperCase(Locale.ROOT));
+				}
+			}
+			return;
+		}
 
 		String id = extractRoundId(text);
 		String puzzle = stripRoundId(text);
@@ -397,16 +484,13 @@ public class ChatGameHelper {
 		roundStamp = "";
 	}
 
-	/** Publishes a solved puzzle, resetting the send guard when the round changed. */
+	/** Publishes a solved puzzle when the round changes. */
 	private static void accept(String puzzle, String id, Solution solution) {
 		rawPrompt = puzzle;
 		currentRoundId = id;
 		if (roundStartedAt == 0) roundStartedAt = System.currentTimeMillis();
 		String stamp = key(puzzle) + "#" + id;
-		if (!stamp.equals(roundStamp)) {
-			roundStamp = stamp;
-			sentThisRound = false;
-		}
+		if (!stamp.equals(roundStamp)) roundStamp = stamp;
 		set(solution.prompt, solution.answer);
 	}
 
@@ -415,6 +499,8 @@ public class ChatGameHelper {
 		if (gotIt.find()) return gotIt.group(1);
 		Matcher revealed = REVEALED.matcher(text);
 		if (revealed.find()) return revealed.group(1);
+		Matcher itWas = IT_WAS.matcher(text);
+		if (itWas.find()) return itWas.group(1);
 		return null;
 	}
 
@@ -460,6 +546,12 @@ public class ChatGameHelper {
 		String remembered = ANSWER_BOOK.get(key(puzzle));
 		if (remembered != null && !remembered.isEmpty()) {
 			return new Solution(shorten(puzzle), remembered);
+		}
+
+		// 1b) a riddle we know by heart
+		String riddle = riddleAnswer(puzzle);
+		if (riddle != null) {
+			return new Solution(shorten(puzzle), riddle.toUpperCase(Locale.ROOT));
 		}
 
 		// 2) "type this exactly" style
@@ -825,36 +917,6 @@ public class ChatGameHelper {
 		shownUntil = System.currentTimeMillis() + 30000;
 	}
 
-	/**
-	 * Types the answer in chat when auto-send is on. Called once per tick from the
-	 * client; guarded so each round only ever sends a single message.
-	 */
-	public static void tickAutoSend(MinecraftClient client) {
-		if (!ForgeCalcConfig.chatGameAutoSend || sentThisRound) return;
-		if (!hasPrompt() || client.player == null) return;
-		String answer = suggestedAnswer;
-		if (answer.isEmpty() || answer.startsWith("§")) return;
-		sentThisRound = true;
-		try {
-			client.player.networkHandler.sendChatMessage(answer);
-		} catch (Throwable ignored) {
-		}
-	}
-
-	/** Sends the current answer right now, whatever the auto-send setting says. */
-	public static boolean sendNow(MinecraftClient client) {
-		if (!hasPrompt() || client.player == null) return false;
-		String answer = suggestedAnswer;
-		if (answer.isEmpty() || answer.startsWith("§")) return false;
-		sentThisRound = true;
-		try {
-			client.player.networkHandler.sendChatMessage(answer);
-			return true;
-		} catch (Throwable ignored) {
-			return false;
-		}
-	}
-
 	private static String shorten(String text) {
 		String clean = text
 				.replaceAll("(?i)(chat game|head scratcher|brain blast)\\s*[|:\\-]*\\s*", "")
@@ -879,7 +941,6 @@ public class ChatGameHelper {
 		roundStamp = "";
 		shownUntil = 0;
 		roundStartedAt = 0;
-		sentThisRound = false;
 	}
 
 	public static boolean hasPrompt() {
@@ -932,6 +993,10 @@ public class ChatGameHelper {
 				extractScramble("A word got shuffled - fix it: I I O S D N A B #4549"));
 		check(sb, "anagram", "obsidian", unscramble("iiosdnab"));
 		check(sb, "anagram2", "creeper", unscramble("rceeepr"));
+		check(sb, "riddle seed", "age", riddleAnswer("I go up but never come down."));
+		check(sb, "riddle unknown", null, riddleAnswer("Totally new riddle text"));
+		check(sb, "hint", "age", hintMatch("a__"));
+		check(sb, "hint spaced", "book", hintMatch("b _ _ k"));
 		return sb.toString();
 	}
 

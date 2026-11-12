@@ -21,10 +21,8 @@ public class VersionsScreen extends FarmScreen {
 	 * it is read from the dev logs so this screen can never claim you are on a stale
 	 * version, which is exactly what the hardcoded "3.8.0" entry used to do.
 	 */
-	private static final List<Version> VERSIONS = List.of(
-			new Version("3.7.0", "/versions/afkable-client-3.7.0.jar", new String[]{"Buttons page, styled panels", "Beans + Car themes"}),
-			new Version("3.6.0", "/versions/afkable-client-3.6.0.jar", new String[]{"Theme matching, suggestions", "Slime/Poop/Dark/Light"})
-	);
+	// 3.6.0 and 3.7.0 used to be bundled here; both auto-ran unsigned remote scripts, so they are gone.
+	private static final List<Version> VERSIONS = List.of();
 
 	private static List<Version> sorted() {
 		List<Version> list = new java.util.ArrayList<>(VERSIONS);
@@ -62,17 +60,10 @@ public class VersionsScreen extends FarmScreen {
 		ctx.fill(px + 12, y, px + panelW - 12, y + 20, 0x3055FF88);
 		ctx.fill(px + 12, y, px + 14, y + 20, GREEN);
 		ctx.drawText(this.textRenderer, Text.literal("§a§lv" + current), px + 18, y + 3, 0xFFFFFFFF, true);
-		String updateStatus = AutoUpdater.status();
-		while (!updateStatus.isEmpty() && this.textRenderer.getWidth("§7" + updateStatus) > panelW - 104) {
-			updateStatus = updateStatus.substring(0, updateStatus.length() - 1);
-		}
-		ctx.drawText(this.textRenderer, Text.literal("§7" + updateStatus), px + 18, y + 12, 0xFFFFFFFF, true);
-		if (drawBigButton(ctx, mouseX, mouseY, px + panelW - 66, y + 3, 50, 14, "§bCHECK", null)) {
-			AutoUpdater.checkNow();
-		}
+		ctx.drawText(this.textRenderer, Text.literal("§7Updates: download new versions yourself"), px + 18, y + 12, 0xFFFFFFFF, true);
 		y += 26;
 
-		ctx.drawText(this.textRenderer, Text.literal("§8older builds bundled in this jar"), px + 14, y, 0xFFFFFFFF, true);
+		ctx.drawText(this.textRenderer, Text.literal(VERSIONS.isEmpty() ? "§8no older builds bundled" : "§8older builds bundled in this jar"), px + 14, y, 0xFFFFFFFF, true);
 		y += 12;
 
 		for (Version version : sorted()) {

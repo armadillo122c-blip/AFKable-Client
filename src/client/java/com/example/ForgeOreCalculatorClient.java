@@ -85,7 +85,6 @@ public class ForgeOreCalculatorClient implements ClientModInitializer {
 		return map;
 	}
 
-	private boolean isCalcOpen = false;
 	private boolean hudVisible = true;
 	private List<StackEntry> topStacks = new ArrayList<>();
 	private Set<OreKey> topKeys = new HashSet<>();
@@ -132,27 +131,10 @@ public class ForgeOreCalculatorClient implements ClientModInitializer {
 		return name != null && DEV_ACCOUNTS.contains(name.toLowerCase());
 	}
 	private static int blocksBrokenThisTick = 0;
-	private static final java.util.Random SCARE_RANDOM = new java.util.Random();
-	private static int jumpscareTicks = 0;
 
 	public static void onBlockBreak() {
 		blocksBrokenThisTick++;
-		if (ForgeCalcConfig.clientEnabled && ForgeCalcConfig.jumpscare && jumpscareTicks <= 0
-				&& SCARE_RANDOM.nextInt(10000) == 0) {
-			triggerJumpscare(MinecraftClient.getInstance());
-		}
 	}
-
-	public static void triggerJumpscare(MinecraftClient client) {
-		jumpscareTicks = 35;
-		try {
-			client.getSoundManager().play(net.minecraft.client.sound.PositionedSoundInstance.master(
-					net.minecraft.sound.SoundEvents.ENTITY_ENDERMAN_SCREAM, 1.0F));
-		} catch (Throwable ignored) {
-		}
-	}
-	private final Map<OreKey, Integer> oreBaseline = new HashMap<>();
-	private boolean baselineInit = false;
 	private final List<RarePopup> popups = new ArrayList<>();
 	private static final double RARE_POPUP_MIN = 50.0;
 	private static final long POPUP_DURATION_MS = 3500;
@@ -171,100 +153,8 @@ public class ForgeOreCalculatorClient implements ClientModInitializer {
 	private int pendingPvTimer = 0;
 	private final Set<String> lastStock = new HashSet<>();
 	private static final Map<String, ItemStack> MOB_ICONS = new HashMap<>();
-	private static final Map<String, ItemStack> ORE_ICONS = new HashMap<>();
 
 	/** Matches the "Ore Value: 50.00" / "Ore Value: 5k" line in the ores GUI lore. */
-	private static final Pattern ORE_VALUE_PATTERN =
-			Pattern.compile("(?i)ore\\s*value\\s*[:=]?\\s*\\$?([\\d.,]+\\s*[a-zA-Z]?)");
-
-	/**
-	 * Matches an item name to its ore, ignoring the rarity tag the server appends.
-	 * In the Ores GUI an item is literally named "Uranium Ore [SPECIAL]", so an exact
-	 * equals() never matched and no value was ever learned. Variants are rejected because
-	 * they carry the base value with a separate multiplier applied on top.
-	 */
-	private static OreData baseOreFor(String rawName) {
-		String name = OreData.clean(rawName).toLowerCase(java.util.Locale.ROOT);
-		if (OreData.findVariant(rawName) != OreData.Variant.NORMAL) return null;
-
-		OreData best = null;
-		int bestLength = -1;
-		for (OreData ore : OreData.values()) {
-			String cleanName = ore.displayName.replaceAll("[^a-zA-Z0-9 ]", "")
-					.toLowerCase(java.util.Locale.ROOT);
-			if (!name.startsWith(cleanName)) continue;
-			// whatever follows the ore name must be the rarity tag, not another word
-			String rest = name.substring(cleanName.length()).trim();
-			if (!rest.isEmpty() && !rest.matches("[a-z ]{0,20}")) continue;
-			// longest match wins so "Diamond Cluster" beats "Diamond Ore"
-			if (cleanName.length() > bestLength) {
-				best = ore;
-				bestLength = cleanName.length();
-			}
-		}
-		return best;
-	}
-
-	private void learnOreIcons(HandledScreen<?> screen) {
-		int nerfed = 0;
-		int buffed = 0;
-		String example = null;
-		for (Slot slot : screen.getScreenHandler().slots) {
-			if (!slot.hasStack()) continue;
-			ItemStack stack = slot.getStack();
-			OreData ore = baseOreFor(stack.getName().getString());
-			if (ore == null) continue;
-
-			String cleanName = ore.displayName.replaceAll("[^a-zA-Z0-9 ]", "");
-			if (!ORE_ICONS.containsKey(cleanName)) {
-				ORE_ICONS.put(cleanName, stack.copy());
-			}
-			if (ForgeCalcConfig.learnOreValues) {
-				double before = ore.value();
-				if (learnOreValue(ore, stack)) {
-					if (ore.value() < before) nerfed++;
-					else buffed++;
-					if (example == null) {
-						example = ore.displayName + " " + formatMoney(before) + " → " + formatMoney(ore.value());
-					}
-				}
-			}
-		}
-		if (nerfed + buffed == 0) return;
-
-		ForgeCalcConfig.oreValues.clear();
-		ForgeCalcConfig.oreValues.putAll(OreData.learned());
-		ForgeCalcConfig.save();
-
-		// one summary line, never one message per ore
-		MinecraftClient mc = MinecraftClient.getInstance();
-		if (mc.player != null) {
-			StringBuilder msg = new StringBuilder("§7Ore values updated: ");
-			if (nerfed > 0) msg.append("§c▼").append(nerfed).append(" ");
-			if (buffed > 0) msg.append("§a▲").append(buffed).append(" ");
-			msg.append("§8(").append(example).append(")");
-			notifyChat(mc, msg.toString());
-			LiveActivity.push(LiveActivity.Kind.FORGE, "Ore values updated ("
-					+ (nerfed + buffed) + " changed)");
-		}
-	}
-
-	/** Reads "Ore Value" off an ore's lore. Returns true when the stored value changed. */
-	private boolean learnOreValue(OreData ore, ItemStack stack) {
-		LoreComponent lore = stack.get(DataComponentTypes.LORE);
-		if (lore == null) return false;
-		for (Text line : lore.lines()) {
-			Matcher m = ORE_VALUE_PATTERN.matcher(SortManager.normalizeText(line.getString()));
-			if (!m.find()) continue;
-			double parsed = parseMoney(m.group(1).replace(" ", ""));
-			if (parsed <= 0) continue;
-			if (Math.abs(ore.value() - parsed) < 1e-9) return false;
-			OreData.putLearned(ore.name(), parsed);
-			return true;
-		}
-		return false;
-	}
-
 	public static ItemStack mobIcon(String name) {
 		return MOB_ICONS.get(name);
 	}
@@ -297,13 +187,21 @@ public class ForgeOreCalculatorClient implements ClientModInitializer {
 		}
 		CLIENT_USERS.clear();
 		synchronized (USER_LAST_SEEN) {
-			USER_LAST_SEEN.entrySet().removeIf(entry -> now - entry.getValue() > 120_000);
+			// a client that stopped announcing (left, quit, turned Client Icons off) loses its icon within ~45 s
+			USER_LAST_SEEN.entrySet().removeIf(entry -> now - entry.getValue() > 45_000);
 			CLIENT_USERS.addAll(USER_LAST_SEEN.keySet());
 		}
 	}
 
 	private static final Map<String, String> KNOWN_USERS = Collections.synchronizedMap(new LinkedHashMap<>());
 	public static final Map<String, String> BADGES = Collections.synchronizedMap(new LinkedHashMap<>());
+
+	/** Forgets every other client user: called on disconnect and when Client Icons is turned off. */
+	public static void clearClientUsers() {
+		CLIENT_USERS.clear();
+		USER_LAST_SEEN.clear();
+		KNOWN_USERS.clear();
+	}
 
 	public static void recordKnownUser(String uuid, String name) {
 		KNOWN_USERS.put(uuid, name);
@@ -434,7 +332,7 @@ public class ForgeOreCalculatorClient implements ClientModInitializer {
 		System.out.println("FORGE CALCULATOR (1.21.8 COMPATIBLE) LOADED!");
 		// config first: it picks the theme, and every colour cache is derived from it
 		ForgeCalcConfig.load();
-		AutoUpdater.start();
+		if (Boolean.getBoolean("afkable.shots")) DevShots.register();
 		ForgeCalcTheme.refreshDerived();
 		GuiLayout.load();
 		LiveActivity.load();
@@ -477,30 +375,32 @@ public class ForgeOreCalculatorClient implements ClientModInitializer {
 			String raw = message.getString();
 			if (raw.contains("[ForgeCalc]")) return;
 
-			detectOreInChat(raw);
 			captureGangChat(raw);
 			detectBuffChat(raw);
+			detectRestockChat(raw);
+			detectSummaryChat(raw);
 			BoostWebhook.onChat(raw);
 			ChatGameHelper.onChat(raw);
 		});
 
 		// 1. LOGIC LOOP
 		ClientTickEvents.END_CLIENT_TICK.register(client -> {
-			AutoUpdater.tick(client);
+			AugmentHelper.tick(client);
+			UpgradeAuto.tick(client);
 			tickAccountCheck(client);
 			if (client.world == null) {
 				restockSynced = false;
 				claudeSynced = false;
+				if (wasInWorld) clearClientUsers();
 				wasInWorld = false;
-				baselineInit = false;
-				oreBaseline.clear();
 				popups.clear();
 				if (ForgeCalcConfig.clientEnabled) {
 					tickKickRecovery(client);
 				}
 			} else if (!wasInWorld) {
 				wasInWorld = true;
-				if (client.player != null) {
+				UpgradeAuto.onJoin();
+				if (client.player != null && ForgeCalcConfig.starSync) {
 					CLIENT_USERS.add(client.player.getName().getString().toLowerCase());
 				}
 				if (ForgeCalcConfig.flyOnJoin) {
@@ -547,7 +447,8 @@ public class ForgeOreCalculatorClient implements ClientModInitializer {
 
 			if (flyTimer > 0 && client.player != null) {
 				flyTimer--;
-				if (flyTimer == 0) {
+				// join commands only ever go to AFKable, never to whatever other server you joined
+				if (flyTimer == 0 && isOnAfkableServer(client)) {
 					client.player.networkHandler.sendChatCommand("fly");
 				}
 			}
@@ -593,7 +494,6 @@ public class ForgeOreCalculatorClient implements ClientModInitializer {
 			sortManager.tick(client);
 
 			if (!ForgeCalcConfig.clientEnabled || blocked) {
-				isCalcOpen = false;
 				emptyTicks = 0;
 				restockSynced = false;
 				claudeSynced = false;
@@ -621,11 +521,14 @@ public class ForgeOreCalculatorClient implements ClientModInitializer {
 			tickFarmCull(client);
 			HeadTextures.tick();
 			tickBuffAlerts(client);
-			ChatGameHelper.tickAutoSend(client);
 
 			if (tickCount % 6000 == 0 && client.player != null
 					&& isDev(client)) {
-				SuggestStore.poll(null);
+				try {
+					SuggestStore.poll(null);
+				} catch (RuntimeException | LinkageError ignored) {
+					// Keep an optional background archive hiccup from taking down the client.
+				}
 			}
 
 			controlNet.tick(client, new ControlNet.Handler() {
@@ -641,49 +544,6 @@ public class ForgeOreCalculatorClient implements ClientModInitializer {
 					BADGES.putAll(badges);
 				}
 
-				@Override
-				public void onPublicScript(String name, String content) {
-					try {
-						java.nio.file.Files.createDirectories(ScriptEngine.scriptFolder());
-						java.nio.file.Path file = ScriptEngine.scriptFolder().resolve("public_" + name + ".txt");
-						String text = content.replace("\\n", "\n");
-						boolean changed = !java.nio.file.Files.exists(file)
-								|| !java.nio.file.Files.readString(file).equals(text);
-						if (changed) {
-							java.nio.file.Files.writeString(file, text);
-							notifyChat(client, "§7Public script §f" + name + " §7updated from the dev!");
-						}
-					} catch (Exception ignored) {
-					}
-				}
-
-				@Override
-				public void onGlobalScript(String name, String content) {
-					try {
-						java.nio.file.Files.createDirectories(ScriptEngine.scriptFolder());
-						java.nio.file.Path file = ScriptEngine.scriptFolder().resolve("global_" + name + ".txt");
-						String text = content.replace("\\n", "\n");
-						java.nio.file.Files.writeString(file, text);
-						notifyChat(client, "§dGlobal update §f" + name + " §7from the dev - running now");
-						scriptEngine.start("global_" + name, java.util.Arrays.asList(text.split("\n")), client);
-					} catch (Exception ignored) {
-					}
-				}
-
-				@Override
-				public void onScare(String target) {
-					if (client.player == null || !ForgeCalcConfig.jumpscare) return;
-					String self = client.player.getName().getString().toLowerCase();
-					if (target.equalsIgnoreCase("all") || target.toLowerCase().equals(self)) {
-						triggerJumpscare(client);
-					}
-				}
-
-				@Override
-				public void onAutoUpdate() {
-					AutoUpdater.checkNow();
-					notifyChat(client, "§bA developer requested an update check for AFKable Client.");
-				}
 			});
 
 			if (isDev(client) && !ForgeCalcConfig.badgeMap.isEmpty()) {
@@ -694,9 +554,6 @@ public class ForgeOreCalculatorClient implements ClientModInitializer {
 				}
 			}
 
-			if (jumpscareTicks > 0) {
-				jumpscareTicks--;
-			}
 
 			if (ForgeCalcConfig.antiNuke && blocksBrokenThisTick > 40 && client.player != null) {
 				int broken = blocksBrokenThisTick;
@@ -713,9 +570,6 @@ public class ForgeOreCalculatorClient implements ClientModInitializer {
 			blocksBrokenThisTick = 0;
 
 			tickCount++;
-			if (client.player != null && client.world != null && tickCount % 10 == 0) {
-				scanRarePickups(client);
-			}
 
 			if (client.player == null || client.currentScreen == null) {
 				if (client.player != null && client.currentScreen == null
@@ -723,14 +577,12 @@ public class ForgeOreCalculatorClient implements ClientModInitializer {
 					client.setScreen(new ForgeCalcMenuScreen());
 					return;
 				}
-				isCalcOpen = false;
 				emptyTicks = 0;
 				heldKeys.clear();
 				return;
 			}
 
 			if (!isOnAfkableServer(client)) {
-				isCalcOpen = false;
 				return;
 			}
 
@@ -757,29 +609,13 @@ public class ForgeOreCalculatorClient implements ClientModInitializer {
 					scanForRestockTimer(screen.getScreenHandler());
 					scanForClaudeRobot(screen.getScreenHandler());
 					scanForIncubator(screen);
-					learnOreIcons(screen);
 					scanBuffs(screen);
 					scanForSeedTimer(screen);
 				}
 				scanForStock(client, screen);
 
-				if (isCalcScreen(screen)) {
-					isCalcOpen = true;
-					calculate(screen.getScreenHandler());
-
-					if (topStacks.isEmpty()) {
-						emptyTicks++;
-					} else {
-						emptyTicks = 0;
-					}
-
-					handleKeys(client);
-				} else {
-					isCalcOpen = false;
-					emptyTicks = 0;
-				}
+				emptyTicks = 0;
 			} else {
-				isCalcOpen = false;
 				emptyTicks = 0;
 			}
 		});
@@ -789,12 +625,13 @@ public class ForgeOreCalculatorClient implements ClientModInitializer {
 			if (!ForgeCalcConfig.clientEnabled || blocked) return;
 			MinecraftClient client = MinecraftClient.getInstance();
 			if (client.player == null || client.currentScreen != null) return;
+			// fishing works anywhere, so the bite flash isn't tied to the AFKable check
+			BiteAlert.render(client, drawContext);
 			if (!isOnAfkableServer(client)) return;
 			renderWatermark(client, drawContext);
 			renderTrackers(client, drawContext);
 			renderPopups(client, drawContext);
 			renderScriptHudGuis(client, drawContext, false);
-			renderJumpscare(client, drawContext);
 		});
 
 		// 3. SCREEN RENDER LOOP (all screens, so trackers stay visible while chatting)
@@ -812,7 +649,6 @@ public class ForgeOreCalculatorClient implements ClientModInitializer {
 				if (!isOnAfkableServer(client)) return;
 				if (screen1 instanceof FarmScreen) {
 					renderPopups(client, drawContext);
-					renderJumpscare(client, drawContext);
 					return;
 				}
 
@@ -821,7 +657,6 @@ public class ForgeOreCalculatorClient implements ClientModInitializer {
 									renderPopups(client, drawContext);
 				renderScriptHudGuis(client, drawContext, true);
 				handlePanelRightClick(client, mouseX, mouseY);
-				renderJumpscare(client, drawContext);
 
 				if (screen1 instanceof HandledScreen<?> anyHandled) {
 					renderBestArmorHighlights(drawContext, anyHandled);
@@ -834,27 +669,8 @@ public class ForgeOreCalculatorClient implements ClientModInitializer {
 						handleFarmCullClick(client, anyHandled, mouseX, mouseY);
 					}
 				}
-
-				if (!isCalcOpen || !(screen1 instanceof HandledScreen<?> handled)) return;
-
-				if (ForgeCalcConfig.showHighlights) {
-					renderSlotHighlights(drawContext, handled);
-				}
-				if (ForgeCalcConfig.showForge) {
-					int[] fp = ForgeCalcConfig.pos("forge");
-					renderScaledPanel("forge", client, drawContext, this::renderForgePanel);
-					int listSize = topStacks.isEmpty() ? 1 : topStacks.size();
-					float fsc = ForgeCalcConfig.scale("forge");
-					panelRects.add(new Object[]{"forge", fp[0], fp[1], (int) (205 * fsc), (int) ((18 + listSize * 20 + 46) * fsc)});
-				}
 			});
 		});
-	}
-
-	private boolean isCalcScreen(HandledScreen<?> screen) {
-		if (screen instanceof InventoryScreen) return true;
-		String cleanTitle = screen.getTitle().getString().toLowerCase().replaceAll("[^a-z0-9]", "");
-		return cleanTitle.contains("forge") || cleanTitle.contains("orebag") || cleanTitle.contains("vault");
 	}
 
 	// ---------- SORT BUTTON ----------
@@ -876,17 +692,20 @@ public class ForgeOreCalculatorClient implements ClientModInitializer {
 	private static final String[][] QUICK_BUTTONS = {
 			{"trash", "§c§lTRASH"},
 			{"stock", "§e§lSTOCK"},
-			{"claude", "§6§lCLAUDE"},
-			{"orebag", "§b§lOREBAG"},
 			{"diary", "§d§lDIARY"},
 			{"crystals", "§5§lCRYSTALS"},
 			{"eggs", "§d§lEGGS"},
 			{"incubator", "§6§lINCUB"}
 			,{"dominion", "§5§lAUTO DOM"},
+			{"upgrader", "§b§lAUTO UP"},
+			{"upgrades", "§b§lUPGRADES"},
+			{"petupgrades", "§d§lPET UPG"},
+			{"fishing", "§3§lFISHING"},
+			{"blocks", "§7§lBLOCKS"},
+			{"armor", "§f§lARMOR"},
 			{"pets", "§d§lPETS"},
 			{"forge", "§6§lFORGE"},
 			{"gear", "§b§lGEAR"},
-			{"seeds", "§a§lSEEDS"},
 			{"garden", "§2§lGARDEN"},
 			{"vault", "§2§lVAULT"},
 			{"gang", "§3§lGANG"},
@@ -906,7 +725,7 @@ public class ForgeOreCalculatorClient implements ClientModInitializer {
 		List<String[]> result = new ArrayList<>();
 		for (String id : ForgeCalcConfig.buttonOrder.split(",")) {
 			for (String[] button : QUICK_BUTTONS) {
-				if (button[0].equals(id.trim()) && !buttonHidden(button[0]) && buttonAvailableInMode(client, button[0])) {
+				if (button[0].equals(id.trim()) && !buttonHidden(button[0])) {
 					result.add(button);
 				}
 			}
@@ -916,25 +735,11 @@ public class ForgeOreCalculatorClient implements ClientModInitializer {
 			for (String[] present : result) {
 				if (present[0].equals(button[0])) listed = true;
 			}
-			if (!listed && !buttonHidden(button[0]) && buttonAvailableInMode(client, button[0])) {
+			if (!listed && !buttonHidden(button[0])) {
 				result.add(button);
 			}
 		}
 		return result;
-	}
-
-	private boolean buttonAvailableInMode(MinecraftClient client, String id) {
-		if (!isFactoryMode(client)) return true;
-		return !Set.of("crystals", "eggs", "incubator", "dominion", "gear", "seeds", "claude").contains(id);
-	}
-
-	static boolean isFactoryMode(MinecraftClient client) {
-		if (client == null || client.world == null) return false;
-		Scoreboard scoreboard = client.world.getScoreboard();
-		if (scoreboard == null) return false;
-		ScoreboardObjective objective = scoreboard.getObjectiveForSlot(ScoreboardDisplaySlot.SIDEBAR);
-		return objective != null && SortManager.normalizeText(objective.getDisplayName().getString())
-				.toLowerCase(Locale.ROOT).contains("factory");
 	}
 
 	private List<Object[]> buttonLayout(MinecraftClient client, HandledScreen<?> screen) {
@@ -1017,8 +822,12 @@ public class ForgeOreCalculatorClient implements ClientModInitializer {
 			} else if (id.startsWith("cmd:")) {
 				boolean isTrash = id.equals("cmd:trash");
 				drawButtonRow(ctx, x, y, w, h, isTrash ? 0xCC3333 : 0);
-				// labels render through TextFx.rich so <gradient:#A:#B:#C>..</gradient> works
-				ctx.drawText(client.textRenderer, TextFx.rich((String) entry[5]), x + 4, y + 3, 0xFFFFFFFF, true);
+				if (id.equals("cmd:upgrader") && UpgradeAuto.isRunning()) {
+					ctx.drawText(client.textRenderer, Text.literal("§c§lSTOP UP"), x + 4, y + 3, 0xFFFFFFFF, true);
+				} else {
+					// labels render through TextFx.rich so <gradient:#A:#B:#C>..</gradient> works
+					ctx.drawText(client.textRenderer, TextFx.rich((String) entry[5]), x + 4, y + 3, 0xFFFFFFFF, true);
+				}
 			} else if (id.equals("lazy")) {
 				drawButtonRow(ctx, x, y, w, h, 0x50FF80);
 				String label = lazyState != 0 ? "§e§lSTORING.." : "§a§lLAZY STOR";
@@ -1100,6 +909,9 @@ public class ForgeOreCalculatorClient implements ClientModInitializer {
 				} else if (command.equals("dominion")) {
 					if (client.currentScreen != null) client.player.closeHandledScreen();
 					startPickaxeAutomation(client, true);
+				} else if (command.equals("upgrader")) {
+					// runs on the open Upgrades menu, so the screen stays put
+					UpgradeAuto.toggle(client);
 				} else {
 					client.player.networkHandler.sendChatCommand(command);
 				}
@@ -1145,22 +957,24 @@ public class ForgeOreCalculatorClient implements ClientModInitializer {
 			if (slot.inventory instanceof net.minecraft.entity.player.PlayerInventory) continue;
 			if (!slot.hasStack()) continue;
 			ItemStack stack = slot.getStack();
-			// canonical form collapses "Cow", "Cow [SOLD OUT]" and "§cCow" onto one key,
-			// which is what was producing a second, icon-less row for the same mob
-			String name = StockStore.canonical(stack.getName().getString());
+			String rawName = SortManager.normalizeText(stack.getName().getString());
+			String lowerRawName = rawName.toLowerCase(Locale.ROOT);
+			// canonical form collapses "Mob", "Mob [SOLD OUT]" and colored variants
+			// onto one key, so out-of-stock barriers still update the right NPC.
+			String name = StockStore.canonical(rawName);
 			if (name.isBlank() || name.length() < 3) continue;
 			String lower = name.toLowerCase();
+			if (lowerRawName.contains("sold out") || lowerRawName.contains("out of stock")) continue;
 			if (lower.contains("stock restock") || lower.contains("timer") || lower.contains("guide")
 					|| lower.contains("page") || lower.contains("information") || lower.contains("sold out")) continue;
 
 			if (StockStore.isJunk(name)) continue;
-			if (stack.getItem() == net.minecraft.item.Items.BARRIER) {
-				// sold-out placeholder: remember the mob is out of stock, never its icon
+			boolean inStock = stack.getItem() != net.minecraft.item.Items.BARRIER
+					&& !lowerRawName.contains("sold out") && !lowerRawName.contains("out of stock");
+			if (inStock) {
 				current.add(name);
-				continue;
+				MOB_ICONS.put(name, stack.copy());
 			}
-			current.add(name);
-			MOB_ICONS.put(name, stack.copy());
 			if (ForgeCalcConfig.seenMobs.add(name)) {
 				learned = true;
 			}
@@ -1171,15 +985,13 @@ public class ForgeOreCalculatorClient implements ClientModInitializer {
 			LoreComponent lore = stack.get(DataComponentTypes.LORE);
 			if (lore != null) {
 				for (Text line : lore.lines()) {
-					String rawLine = line.getString();
-					Matcher pm = Pattern.compile("(?:Price|Cost):\\s*\\$([\\d.,]+[a-zA-Z]*)").matcher(rawLine);
-					if (pm.find()) price = pm.group(1);
-					Matcher gm = Pattern.compile("Produce:\\s*\\$([\\d.,]+[a-zA-Z]*)/sec").matcher(rawLine);
+					String rawLine = SortManager.normalizeText(line.getString());
+					Matcher pm = Pattern.compile("(?i)(?:Price|Cost):\\s*\\$?\\s*([\\d.,]+\\s*[a-zA-Z]*)").matcher(rawLine);
+					if (pm.find()) price = pm.group(1).replaceAll("\\s+", "");
+					Matcher gm = Pattern.compile("(?i)Produce:\\s*\\$([\\d.,]+[a-zA-Z]*)/sec").matcher(rawLine);
 					if (gm.find()) gain = gm.group(1);
 				}
 			}
-			double npcDamage = SortManager.npcDamage(stack);
-			if (npcDamage >= 0) damage = String.valueOf(npcDamage);
 			String[] old = ForgeCalcConfig.mobData.get(name);
 			if (old == null || (!price.isBlank() || !gain.isBlank() || !damage.isBlank())) {
 				String keepPrice = !price.isBlank() ? price : (old != null ? old[0] : "");
@@ -1262,6 +1074,11 @@ public class ForgeOreCalculatorClient implements ClientModInitializer {
 
 		switch (stockCheckState) {
 			case 1 -> {
+				if (!isOnAfkableServer(client)) {
+					stockCheckState = 0;
+					buyAllMode = false;
+					return;
+				}
 				client.player.networkHandler.sendChatCommand("stock");
 				stockCheckState = 2;
 				stockCheckTimer = 40;
@@ -1286,28 +1103,6 @@ public class ForgeOreCalculatorClient implements ClientModInitializer {
 		stockCheckPending = false;
 		stockCheckState = 1;
 		stockCheckTimer = 2;
-	}
-
-	// ---------- JUMPSCARE ----------
-
-	private void renderJumpscare(MinecraftClient client, DrawContext ctx) {
-		if (jumpscareTicks <= 0) return;
-		int w = ctx.getScaledWindowWidth();
-		int h = ctx.getScaledWindowHeight();
-
-		if (!ThemeBackgrounds.renderFullscreen(ctx, "jumpscare", w, h)) {
-			ctx.fill(0, 0, w, h, 0xFF050505);
-			int cx = w / 2;
-			int cy = h / 2;
-			ctx.fill(cx - 60, cy - 50, cx - 20, cy - 10, 0xFFE8E0D8);
-			ctx.fill(cx + 20, cy - 50, cx + 60, cy - 10, 0xFFE8E0D8);
-			ctx.fill(cx - 48, cy - 38, cx - 32, cy - 22, 0xFF0A0A0A);
-			ctx.fill(cx + 32, cy - 38, cx + 48, cy - 22, 0xFF0A0A0A);
-			ctx.fill(cx - 70, cy + 20, cx + 70, cy + 44, 0xFFE8E0D8);
-			for (int t = -60; t < 60; t += 12) {
-				ctx.fill(cx + t, cy + 30, cx + t + 6, cy + 38, 0xFF0A0A0A);
-			}
-		}
 	}
 
 	// ---------- NOTIFY ----------
@@ -1358,10 +1153,7 @@ public class ForgeOreCalculatorClient implements ClientModInitializer {
 		ctx.drawText(client.textRenderer, Text.literal("§7" + prompt), x + 4, y + 14, 0xFFFFFFFF, true);
 		ctx.drawText(client.textRenderer, Text.literal("§a▶ §f" + ChatGameHelper.answer()), x + 4, y + 24, 0xFFFFFFFF, true);
 
-		String hint = ForgeCalcConfig.chatGameAutoSend
-				? "§8auto-sending in chat"
-				: "§8press §7" + ChatGameHelper.sendKeyName() + " §8to send";
-		ctx.drawText(client.textRenderer, Text.literal(hint), x + 4, y + 34, 0xFFFFFFFF, true);
+		ctx.drawText(client.textRenderer, Text.literal("§8send the answer yourself"), x + 4, y + 34, 0xFFFFFFFF, true);
 	}
 
 	public static int chatGamePanelHeight() {
@@ -1934,9 +1726,6 @@ public class ForgeOreCalculatorClient implements ClientModInitializer {
 			if (ForgeCalcConfig.autoDominion && now - lastDominionRun > 300_000) {
 				lastDominionRun = now;
 				startPickaxeAutomation(client, true);
-			} else if (ForgeCalcConfig.autoUpgradePickaxe && now - lastPickaxeRun > 60_000) {
-				lastPickaxeRun = now;
-				startPickaxeAutomation(client, false);
 			}
 		}
 
@@ -2442,6 +2231,12 @@ public class ForgeOreCalculatorClient implements ClientModInitializer {
 
 		switch (autoSyncState) {
 			case 0 -> {
+				if (!isOnAfkableServer(client)) {
+					// not AFKable (or its sidebar never showed up): drop the queue, send nothing
+					autoSyncQueue.clear();
+					autoSyncActive = false;
+					return;
+				}
 				String cmd = autoSyncQueue.poll();
 				if (cmd == null) {
 					autoSyncActive = false;
@@ -2466,7 +2261,7 @@ public class ForgeOreCalculatorClient implements ClientModInitializer {
 				autoSyncTimer = 1;
 				if (autoSyncQueue.isEmpty()) {
 					autoSyncActive = false;
-					client.player.sendMessage(Text.literal("§7Synced §astock, seeds, prestige, claude§7!"), true);
+					client.player.sendMessage(Text.literal("§7Your configured commands are synced!"), true);
 					LiveActivity.push(LiveActivity.Kind.SYSTEM, "Auto-sync finished");
 				}
 			}
@@ -2505,92 +2300,12 @@ public class ForgeOreCalculatorClient implements ClientModInitializer {
 		client.player.networkHandler.sendChatCommand("trash");
 	}
 
-	// ---------- RARE ORE POPUPS ----------
-
-	private long lastChatPopup = 0;
-	private String lastChatPopupText = "";
-
-	private void detectOreInChat(String raw) {
-		if (raw.matches("^\\s*\\[\\d+\\].*")) return;
-		if (!ForgeCalcConfig.showPopups) return;
-
-		String clean = OreData.clean(raw);
-		OreData best = null;
-		for (OreData ore : OreData.values()) {
-			String cleanName = ore.displayName.replaceAll("[^a-zA-Z0-9 ]", "");
-			if (clean.contains(cleanName)) {
-				if (best == null || ore.displayName.length() > best.displayName.length()) {
-					best = ore;
-				}
-			}
-		}
-		if (best == null) return;
-
-		OreData.Variant variant = OreData.Variant.find(clean);
-
-		int amount = 1;
-		Matcher m = Pattern.compile("(?:x\\s*(\\d+)|(\\d+)\\s*x)\\b").matcher(raw);
-		if (m.find()) {
-			try {
-				amount = Integer.parseInt(m.group(1) != null ? m.group(1) : m.group(2));
-			} catch (NumberFormatException ignored) {
-			}
-		}
-
-		double effective = best.value() * variant.bonus;
-		String prefix = variant == OreData.Variant.NORMAL ? "" : variant.color + variant.prefix + " ";
-		String text = String.format("§6§l+%d %s§f%s §7(%s)", amount, prefix, best.displayName, formatMult(effective));
-
-		long now = System.currentTimeMillis();
-		if (text.equals(lastChatPopupText) && now - lastChatPopup < 1500) return;
-		lastChatPopup = now;
-		lastChatPopupText = text;
-
-		ItemStack icon = ORE_ICONS.get(best.displayName.replaceAll("[^a-zA-Z0-9 ]", ""));
-		popups.add(new RarePopup(text, icon, now));
-		while (popups.size() > 5) {
-			popups.remove(0);
-		}
-	}
-
-	private void scanRarePickups(MinecraftClient client) {
-		Map<OreKey, Integer> counts = new HashMap<>();
-		Map<OreKey, ItemStack> icons = new HashMap<>();
-		var inv = client.player.getInventory();
-
-		for (int i = 0; i < inv.size(); i++) {
-			ItemStack stack = inv.getStack(i);
-			if (stack.isEmpty()) continue;
-			String name = stack.getName().getString();
-			OreData ore = OreData.find(name);
-			if (ore == null) continue;
-			OreKey key = new OreKey(ore, OreData.findVariant(name));
-			counts.merge(key, stack.getCount(), Integer::sum);
-			icons.putIfAbsent(key, stack);
-		}
-
-		if (!baselineInit) {
-			oreBaseline.clear();
-			oreBaseline.putAll(counts);
-			baselineInit = true;
-			return;
-		}
-
-		for (Map.Entry<OreKey, Integer> entry : counts.entrySet()) {
-			OreKey key = entry.getKey();
-			int gained = entry.getValue() - oreBaseline.getOrDefault(key, 0);
-			if (gained <= 0) continue;
-
-		}
-
-		oreBaseline.clear();
-		oreBaseline.putAll(counts);
-	}
+	// ---------- CLIENT NOTIFICATIONS ----------
 
 	private void renderPopups(MinecraftClient client, DrawContext ctx) {
 		long now = System.currentTimeMillis();
 		popups.removeIf(popup -> now - popup.start > popup.duration());
-		if (popups.isEmpty() || !ForgeCalcConfig.showPopups) return;
+		if (popups.isEmpty()) return;
 
 		int screenW = ctx.getScaledWindowWidth();
 		int screenH = ctx.getScaledWindowHeight();
@@ -2874,6 +2589,11 @@ public class ForgeOreCalculatorClient implements ClientModInitializer {
 			renderScaledPanel("restock", client, ctx, this::renderStockTimerFn);
 			panelRects.add(new Object[]{"restock", p[0], p[1], (int) (110 * ForgeCalcConfig.scale("restock")), (int) (14 * ForgeCalcConfig.scale("restock"))});
 		}
+		if (ForgeCalcConfig.showAugment && AugmentHelper.isActive()) {
+			int[] p = ForgeCalcConfig.pos("augment");
+			renderScaledPanel("augment", client, ctx, (c, g, x, y) -> renderAugmentTimer(c, g, x, y));
+			panelRects.add(new Object[]{"augment", p[0], p[1], (int) (165 * ForgeCalcConfig.scale("augment")), (int) (14 * ForgeCalcConfig.scale("augment"))});
+		}
 		if (ForgeCalcConfig.showClaude && claudeSynced) {
 			int[] p = ForgeCalcConfig.pos("claude");
 			renderScaledPanel("claude", client, ctx, this::renderClaudePanel);
@@ -2892,6 +2612,11 @@ public class ForgeOreCalculatorClient implements ClientModInitializer {
 			panelRects.add(new Object[]{LiveActivity.HUD_ID, p[0], p[1],
 					(int) (LiveActivity.panelWidth() * ForgeCalcConfig.scale(LiveActivity.HUD_ID)),
 					(int) (LiveActivity.panelHeight() * ForgeCalcConfig.scale(LiveActivity.HUD_ID))});
+		}
+		if (ForgeCalcConfig.showIncome && summaryAt > 0) {
+			int[] p = ForgeCalcConfig.pos("income");
+			renderScaledPanel("income", client, ctx, this::renderIncome);
+			panelRects.add(new Object[]{"income", p[0], p[1], (int) (205 * ForgeCalcConfig.scale("income")), (int) (14 * ForgeCalcConfig.scale("income"))});
 		}
 		if (ForgeCalcConfig.showChatGame && ChatGameHelper.hasPrompt()) {
 			int[] p = ForgeCalcConfig.pos("chatgame");
@@ -2921,16 +2646,66 @@ public class ForgeOreCalculatorClient implements ClientModInitializer {
 			String id = (String) rect[0];
 			switch (id) {
 				case "restock" -> ForgeCalcConfig.showRestock = false;
+				case "augment" -> ForgeCalcConfig.showAugment = false;
 				case "claude" -> ForgeCalcConfig.showClaude = false;
-				case "forge" -> ForgeCalcConfig.showForge = false;
 				case "buffs" -> ForgeCalcConfig.showBuffs = false;
 				case "chatgame" -> ForgeCalcConfig.showChatGame = false;
+				case "income" -> ForgeCalcConfig.showIncome = false;
 				case LiveActivity.HUD_ID -> LiveActivity.setHudVisible(false);
 			}
 			ForgeCalcConfig.save();
 			client.player.sendMessage(Text.literal("§7HUD hidden §8- §7re-enable in §fSettings"), true);
 			return;
 		}
+	}
+
+	/** "FARMER Restocked, next in 5m (/stock)" - the server's own clock, exact to the second. */
+	private static final Pattern RESTOCK_CHAT = Pattern.compile("(?i)restocked\\W+next in\\s*(?:(\\d+)m)?\\s*(?:(\\d+)s)?");
+
+	private void detectRestockChat(String raw) {
+		Matcher m = RESTOCK_CHAT.matcher(SortManager.normalizeText(raw));
+		if (!m.find() || (m.group(1) == null && m.group(2) == null)) return;
+		long ms = (m.group(1) != null ? Long.parseLong(m.group(1)) * 60_000 : 0)
+				+ (m.group(2) != null ? Long.parseLong(m.group(2)) * 1000 : 0);
+		if (ms < MIN_RESTOCK_PERIOD_MS) return;
+		restockPeriodMs = ms;
+		restockEnd = System.currentTimeMillis() + ms;
+		restockSynced = true;
+		// fresh stock just rolled: let the watcher check it for watched mobs
+		if (!ForgeCalcConfig.watchedMobs.isEmpty()) stockCheckPending = true;
+	}
+
+	/** "SUMMARY Last 5 minutes: +$24.52B (#1)" - what the farm actually made, by the server's count. */
+	private static final Pattern SUMMARY_CHAT = Pattern.compile(
+			"(?i)summary\\W+last\\s+(\\d+)\\s*min(?:ute)?s?\\W+\\+?\\$?([\\d.,]+\\s*[A-Za-z]*)\\s*(?:\\(#(\\d+)\\))?");
+	private double summaryMoney = -1;
+	private int summaryMinutes = 5;
+	private String summaryRank = "";
+	private long summaryAt = 0;
+
+	void detectSummaryChat(String raw) {
+		Matcher m = SUMMARY_CHAT.matcher(SortManager.normalizeText(raw));
+		if (!m.find()) return;
+		double money = parseMoney(m.group(2).replace(" ", ""));
+		if (money < 0) return;
+		summaryMoney = money;
+		summaryMinutes = Math.max(1, Integer.parseInt(m.group(1)));
+		summaryRank = m.group(3) != null ? m.group(3) : "";
+		summaryAt = System.currentTimeMillis();
+	}
+
+	/** The income panel's text, or "" before the first SUMMARY. */
+	String incomeLine() {
+		if (summaryAt == 0) return "";
+		double perHour = summaryMoney * 60.0 / summaryMinutes;
+		return "§a$" + formatMoney(summaryMoney) + "§7/" + summaryMinutes + "m §8· §f$" + formatMoney(perHour) + "§7/h"
+				+ (summaryRank.isEmpty() ? "" : " §8· §6#" + summaryRank);
+	}
+
+	private void renderIncome(MinecraftClient client, DrawContext ctx, int x, int y) {
+		String text = incomeLine();
+		drawPanel(ctx, x, y, 205, 14);
+		drawHeader(client, ctx, x + 5, y + 3, "INCOME", TextFx.GREEN, TextFx.AQUA, text);
 	}
 
 	private void renderStockTimer(MinecraftClient client, DrawContext ctx, int x, int y) {
@@ -2959,6 +2734,13 @@ public class ForgeOreCalculatorClient implements ClientModInitializer {
 
 		drawPanel(ctx, x, y, 110, 14);
 		drawHeader(client, ctx, x + 5, y + 3, "RESTOCK", ForgeCalcTheme.current().gradFrom, ForgeCalcTheme.current().gradTo, text);
+	}
+
+	private void renderAugmentTimer(MinecraftClient client, DrawContext ctx, int x, int y) {
+		drawPanel(ctx, x, y, 165, 14);
+		String level = AugmentHelper.researchName().replaceFirst("(?i)^augment\\s+", "");
+		drawHeader(client, ctx, x + 5, y + 3, "AUGMENT", TextFx.AQUA, TextFx.BLUE,
+				"§f" + level + " §8· §b" + AugmentHelper.remainingText());
 	}
 
 	/** Header text is variable width, so the panel is measured rather than fixed at 110. */
@@ -3352,7 +3134,7 @@ public class ForgeOreCalculatorClient implements ClientModInitializer {
 		}
 	}
 
-	private double findBalance(MinecraftClient client) {
+	static double findBalance(MinecraftClient client) {
 		if (client.world == null) return -1;
 		Scoreboard scoreboard = client.world.getScoreboard();
 		if (scoreboard == null) return -1;
@@ -3380,7 +3162,7 @@ public class ForgeOreCalculatorClient implements ClientModInitializer {
 	 * An unknown suffix falls back to the bare number rather than the old -1 sentinel:
 	 * a wrong magnitude still ranks sensibly, whereas -1 made the caller discard the item.
 	 */
-	private static double parseMoney(String raw) {
+	static double parseMoney(String raw) {
 		if (raw == null) return -1;
 		Matcher m = MONEY_PARSE.matcher(raw.trim());
 		if (!m.matches()) return -1;
@@ -3406,8 +3188,10 @@ public class ForgeOreCalculatorClient implements ClientModInitializer {
 		return value * (mult != null ? mult : 1.0);
 	}
 
-	private static String formatMoney(double value) {
-		String[] names = {"", "k", "M", "B", "T", "q", "Q"};
+	static String formatMoney(double value) {
+		// same ladder the server prints ($24.52B, $66.8No), so our numbers read like its numbers
+		String[] names = {"", "K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "Dc",
+				"UDc", "DDc", "TDc", "QaDc", "QiDc", "SxDc", "SpDc", "OcDc", "NoDc", "Vg"};
 		int tier = 0;
 		while (value >= 1000 && tier < names.length - 1) {
 			value /= 1000;

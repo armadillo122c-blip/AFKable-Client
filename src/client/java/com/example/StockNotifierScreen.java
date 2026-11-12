@@ -54,19 +54,10 @@ public class StockNotifierScreen extends FarmScreen {
 		addSelectableChild(searchField);
 	}
 
+	/** The shared parser knows the whole suffix ladder (K .. No .. Vg); this copy used to stop at T. */
 	private static double parseMoney(String raw) {
 		if (raw == null || raw.isBlank()) return -1;
-		try {
-			String cleaned = raw.replace(",", "").toLowerCase(Locale.ROOT);
-			double mult = 1;
-			if (cleaned.endsWith("k")) { mult = 1e3; cleaned = cleaned.substring(0, cleaned.length() - 1); }
-			else if (cleaned.endsWith("m")) { mult = 1e6; cleaned = cleaned.substring(0, cleaned.length() - 1); }
-			else if (cleaned.endsWith("b")) { mult = 1e9; cleaned = cleaned.substring(0, cleaned.length() - 1); }
-			else if (cleaned.endsWith("t")) { mult = 1e12; cleaned = cleaned.substring(0, cleaned.length() - 1); }
-			return Double.parseDouble(cleaned) * mult;
-		} catch (NumberFormatException e) {
-			return -1;
-		}
+		return ForgeOreCalculatorClient.parseMoney(raw.replace("$", "").trim());
 	}
 
 	@Override

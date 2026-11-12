@@ -263,8 +263,6 @@ public class ScriptEngine {
 						gui "Quick Menu"
 						button "Fly" -> "/fly"
 						button "Stock" -> "/stock"
-						button "Claude" -> "/claude"
-						button "Ore Bag" -> "/orebag"
 						show gui
 						""");
 			}

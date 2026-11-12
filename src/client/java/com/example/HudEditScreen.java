@@ -15,16 +15,19 @@ public class HudEditScreen extends FarmScreen {
 
 	static {
 		SIZES.put("restock", new int[]{110, 14});
+		SIZES.put("augment", new int[]{165, 14});
 		SIZES.put("claude", new int[]{110, 30});
 		SIZES.put("popups", new int[]{155, 26});
 		SIZES.put("chatgame", new int[]{150, 45});
+		SIZES.put("income", new int[]{205, 14});
 		// the forge calculator had a saved position but no editor entry, so it could
 		// never be dragged - it is the biggest panel in the mod, hence the size
 		LABELS.put("restock", "§6§lRESTOCK");
+		LABELS.put("augment", "§6§lAUGMENT");
 		LABELS.put("claude", "§6§lCLAUDE");
-		LABELS.put("popups", "§6§lORE POPUPS");
+		LABELS.put("popups", "§6§lNOTIFICATIONS");
 		LABELS.put("chatgame", "§e§lCHAT GAME");
-		SIZES.put(LiveActivity.HUD_ID, new int[]{LiveActivity.panelWidth(), LiveActivity.panelHeight()});
+		LABELS.put("income", "§a§lINCOME");
 	}
 
 	private final Screen parent;
@@ -161,7 +164,7 @@ public class HudEditScreen extends FarmScreen {
 			int bgAlpha = (int) (0xE0 * al) << 24;
 			ctx.fill(pos[0] - 1, pos[1] - 1, pos[0] + w + 1, pos[1] + h + 1, hover ? GREEN : BORDER);
 			ctx.fill(pos[0], pos[1], pos[0] + w, pos[1] + h, bgAlpha | (ForgeCalcTheme.current().panelBg & 0xFFFFFF));
-			ctx.drawText(this.textRenderer, Text.literal(LABELS.get(id)), pos[0] + 5, pos[1] + 3, 0xFFFFFFFF, true);
+			ctx.drawText(this.textRenderer, Text.literal(LABELS.getOrDefault(id, "§f§l" + id.toUpperCase())), pos[0] + 5, pos[1] + 3, 0xFFFFFFFF, true);
 			drawSampleContent(ctx, id, pos[0], pos[1], w, h);
 
 			if (hover) {
@@ -180,9 +183,16 @@ public class HudEditScreen extends FarmScreen {
 		}
 	}
 
+	private void sampleRight(DrawContext ctx, String text, int x, int y, int w) {
+		ctx.drawText(this.textRenderer, Text.literal(text), x + w - 5 - this.textRenderer.getWidth(text), y + 3, 0xFFFFFFFF, true);
+	}
+
 	private void drawSampleContent(DrawContext ctx, String id, int x, int y, int w, int h) {
 		switch (id) {
-			case "restock" -> ctx.drawText(this.textRenderer, Text.literal("§f2m 14s"), x + 5, y + h - 11, 0xFFFFFFFF, true);
+			// one-line panels: the sample sits right of the label, like the real panel draws it
+			case "restock" -> sampleRight(ctx, "§f2m 14s", x, y, w);
+			case "augment" -> sampleRight(ctx, "§fIII §8· §b14m 46s", x, y, w);
+			case "income" -> sampleRight(ctx, "§a$24.52B§7/5m §8· §f$294B§7/h §8· §6#1", x, y, w);
 			case "claude" -> {
 				ctx.drawText(this.textRenderer, Text.literal("§f78% full"), x + 5, y + 13, 0xFFFFFFFF, true);
 				ctx.fill(x + 5, y + h - 8, x + w - 5, y + h - 4, 0xFF3DDC53);

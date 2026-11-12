@@ -28,23 +28,24 @@ public class ButtonsScreen extends FarmScreen {
 			new String[]{"pv", "§b§lPV -/+"},
 			new String[]{"tinker", "§b§lTINKER"},
 			new String[]{"smelt", "§6§lSMELT ALL"},
-			new String[]{"dominion", "§5§lAUTO DOMINION"});
-	private static final Set<String> FACTORY_UNAVAILABLE = Set.of(
-			"claude", "crystals", "eggs", "incubator", "dominion", "gear", "seeds");
+			new String[]{"dominion", "§5§lAUTO DOMINION"},
+			new String[]{"upgrader", "§b§lAUTO UPGRADER"});
 
 	private static final List<String[]> COMMANDS = List.of(
 			new String[]{"trash", "§c§lTRASH"},
 			new String[]{"stock", "§6§lSTOCK"},
-			new String[]{"claude", "§b§lCLAUDE"},
-			new String[]{"orebag", "§3§lOREBAG"},
 			new String[]{"diary", "§d§lDIARY"},
 			new String[]{"crystals", "§5§lCRYSTALS"},
 			new String[]{"eggs", "§d§lEGGS"},
 			new String[]{"incubator", "§6§lINCUB"},
+			new String[]{"upgrades", "§b§lUPGRADES"},
+			new String[]{"petupgrades", "§d§lPET UPGRADES"},
+			new String[]{"fishing", "§3§lFISHING"},
+			new String[]{"blocks", "§7§lBLOCKS"},
+			new String[]{"armor", "§f§lARMOR"},
 			new String[]{"pets", "§d§lPETS"},
 			new String[]{"forge", "§6§lFORGE"},
 			new String[]{"gear", "§b§lGEAR"},
-			new String[]{"seeds", "§a§lSEEDS"},
 			new String[]{"garden", "§2§lGARDEN"},
 			new String[]{"vault", "§2§lVAULT"},
 			new String[]{"gang", "§3§lGANG"},
@@ -83,12 +84,11 @@ public class ButtonsScreen extends FarmScreen {
 	}
 
 	private boolean isVisibleInCurrentMode(String id) {
-		return !ForgeOreCalculatorClient.isFactoryMode(this.client) || !FACTORY_UNAVAILABLE.contains(id);
+		return true;
 	}
 
 	private List<String[]> specialsForCurrentMode() {
-		if (!ForgeOreCalculatorClient.isFactoryMode(this.client)) return SPECIALS;
-		return SPECIALS.stream().filter(row -> !FACTORY_UNAVAILABLE.contains(row[0])).toList();
+		return SPECIALS;
 	}
 
 	private String labelFor(String id) {
@@ -211,9 +211,8 @@ public class ButtonsScreen extends FarmScreen {
 			boolean rowVisible = ry >= listY && ry + ROW_H <= listY + listH;
 			int bx = listX + listW - 42;
 			boolean hovered = rowVisible && hover(mouseX, mouseY, bx, ry + 1, 38, ROW_H - 2);
-			ctx.fill(bx, ry + 1, bx + 38, ry + ROW_H - 1, hovered ? 0x60FFFFFF : 0x30000000);
-			ctx.drawCenteredTextWithShadow(this.textRenderer, Text.literal(hidden ? "§cOFF" : "§aON"),
-					bx + 19, ry + 5, 0xFFFFFFFF);
+			if (hovered) roundedFill(ctx, bx, ry + 1, bx + 38, ry + ROW_H - 1, 0x22FFFFFF);
+			drawSwitch(ctx, bx + 8, ry + ROW_H / 2 - 5, !hidden);
 			if (hovered && mouseClickedThisFrame) {
 				toggleClicked = row.id();
 			}
@@ -281,7 +280,7 @@ public class ButtonsScreen extends FarmScreen {
 			ForgeCalcConfig.save();
 		}
 		if (drawBigButton(ctx, mouseX, mouseY, px + 18 + third * 2, by, third, 18, "§e§lRESET", null)) {
-			ForgeCalcConfig.buttonOrder = "trash,stock,orebag,diary,pets,forge,garden,vault,gang,prestige,ec";
+			ForgeCalcConfig.buttonOrder = "trash,stock,diary,pets,forge,garden,vault,gang,prestige,ec";
 			ForgeCalcConfig.hiddenButtons.clear();
 			ForgeCalcConfig.save();
 			search = "";

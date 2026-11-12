@@ -28,7 +28,7 @@ public class TrashScreen extends FarmScreen {
 		updateMouse();
 
 		int panelW = 300;
-		int panelH = 268;
+		int panelH = 216;
 		int px = this.width / 2 - panelW / 2;
 		int py = this.height / 2 - panelH / 2;
 
@@ -67,19 +67,6 @@ public class TrashScreen extends FarmScreen {
 		y = toggleRow(ctx, mouseX, mouseY, px + 12, y, w, "Protect TITANIC mobs",
 				ForgeCalcConfig.trashProtectTitanic, v -> ForgeCalcConfig.trashProtectTitanic = v,
 				"§7Never delete a Titanic, whatever else you set");
-		y = toggleRow(ctx, mouseX, mouseY, px + 12, y, w, "Trash low ores",
-				ForgeCalcConfig.trashOres, v -> ForgeCalcConfig.trashOres = v, null);
-
-		// ore threshold
-		ctx.fill(px + 12, y, px + 12 + w, y + 18, 0x28FFFFFF);
-		ctx.drawText(this.textRenderer, Text.literal("§7  under §f" + fmt(ForgeCalcConfig.trashOreMax) + "x §7multiplier"), px + 18, y + 5, 0xFFFFFFFF, true);
-		if (drawBigButton(ctx, mouseX, mouseY, px + 12 + w - 44, y + 2, 20, 14, "§c-", null)) {
-			ForgeCalcConfig.trashOreMax = stepDown(ForgeCalcConfig.trashOreMax);
-		}
-		if (drawBigButton(ctx, mouseX, mouseY, px + 12 + w - 22, y + 2, 20, 14, "§a+", null)) {
-			ForgeCalcConfig.trashOreMax = stepUp(ForgeCalcConfig.trashOreMax);
-		}
-		y += 21;
 
 		y = toggleRow(ctx, mouseX, mouseY, px + 12, y, w, "Trash small mobs",
 				ForgeCalcConfig.trashMobs, v -> ForgeCalcConfig.trashMobs = v, null);
@@ -91,7 +78,7 @@ public class TrashScreen extends FarmScreen {
 		for (int i = 0; i < sizeValues.length; i++) {
 			if (ForgeCalcConfig.trashMobMax >= sizeValues[i]) sizeIndex = i;
 		}
-		ctx.fill(px + 12, y, px + 12 + w, y + 18, 0x28FFFFFF);
+		roundedFill(ctx, px + 12, y, px + 12 + w, y + 18, 0x18FFFFFF);
 		ctx.drawText(this.textRenderer, Text.literal("§7  smaller than §f" + sizeNames[sizeIndex]), px + 18, y + 5, 0xFFFFFFFF, true);
 		if (drawBigButton(ctx, mouseX, mouseY, px + 12 + w - 44, y + 2, 20, 14, "§c-", null)) {
 			ForgeCalcConfig.trashMobMax = sizeValues[Math.max(0, sizeIndex - 1)];
@@ -101,31 +88,11 @@ public class TrashScreen extends FarmScreen {
 		}
 		y += 21;
 
-		y = toggleRow(ctx, mouseX, mouseY, px + 12, y, w, "Trash low-damage Factory NPCs",
-				ForgeCalcConfig.trashFactoryNpcs, v -> ForgeCalcConfig.trashFactoryNpcs = v,
-				"§7NPCs with unknown damage are always protected");
-
-		ctx.fill(px + 12, y, px + 12 + w, y + 18, 0x28FFFFFF);
-		ctx.drawText(this.textRenderer, Text.literal("§7  under §f" + formatDamage(ForgeCalcConfig.trashNpcMaxDamage) + " §7damage"), px + 18, y + 5, 0xFFFFFFFF, true);
-		if (drawBigButton(ctx, mouseX, mouseY, px + 12 + w - 44, y + 2, 20, 14, "§c-", null)) {
-			ForgeCalcConfig.trashNpcMaxDamage = stepNpcDamage(ForgeCalcConfig.trashNpcMaxDamage, -1);
-		}
-		if (drawBigButton(ctx, mouseX, mouseY, px + 12 + w - 22, y + 2, 20, 14, "§a+", null)) {
-			ForgeCalcConfig.trashNpcMaxDamage = stepNpcDamage(ForgeCalcConfig.trashNpcMaxDamage, 1);
-		}
-		y += 21;
-
 		y = toggleRow(ctx, mouseX, mouseY, px + 12, y, w, "Trash everything else",
 				ForgeCalcConfig.trashOther, v -> ForgeCalcConfig.trashOther = v,
 				"§cRisky - deletes any item it doesn't recognise");
 
 		ctx.drawText(this.textRenderer, Text.literal("§8Unreadable mob sizes are always protected."), px + 14, y + 4, 0xFFFFFFFF, true);
-	}
-
-	private String fmt(double value) {
-		if (value >= 1000000) return (long) (value / 1000000) + "M";
-		if (value >= 1000) return (long) (value / 1000) + "k";
-		return String.valueOf((long) value);
 	}
 
 	private String formatDamage(double value) {
@@ -139,39 +106,16 @@ public class TrashScreen extends FarmScreen {
 		return value == Math.rint(value) ? String.valueOf((long) value) : String.format(java.util.Locale.ROOT, "%.1f", value);
 	}
 
-	private double stepNpcDamage(double current, int direction) {
-		double[] steps = {1_000, 5_000, 10_000, 25_000, 50_000, 80_000, 100_000, 250_000, 500_000, 1_000_000, 5_000_000, 10_000_000};
-		if (direction > 0) {
-			for (double step : steps) if (step > current) return step;
-			return current;
-		}
-		for (int i = steps.length - 1; i >= 0; i--) if (steps[i] < current) return steps[i];
-		return steps[0];
-	}
-
-	private double stepUp(double value) {
-		double[] steps = {1, 5, 10, 50, 100, 500, 1000, 5000, 10000, 30000, 60000, 125000, 250000, 500000, 1000000};
-		for (double step : steps) {
-			if (step > value) return step;
-		}
-		return value;
-	}
-
-	private double stepDown(double value) {
-		double[] steps = {1, 5, 10, 50, 100, 500, 1000, 5000, 10000, 30000, 60000, 125000, 250000, 500000, 1000000};
-		double best = steps[0];
-		for (double step : steps) {
-			if (step < value) best = step;
-		}
-		return best;
-	}
 
 	private int toggleRow(DrawContext ctx, int mouseX, int mouseY, int x, int y, int w,
 	                      String label, boolean value, java.util.function.Consumer<Boolean> setter, String hint) {
 		boolean hovered = hover(mouseX, mouseY, x, y, w, 18);
-		ctx.fill(x, y, x + w, y + 18, value ? 0x2855FF88 : 0x20FF5555);
-		ctx.drawText(this.textRenderer, Text.literal((value ? "§f" : "§8") + label), x + 6, y + 5, 0xFFFFFFFF, true);
-		if (drawBigButton(ctx, mouseX, mouseY, x + w - 40, y + 2, 36, 14, value ? "§aON" : "§cOFF", null)) {
+		roundedFill(ctx, x, y, x + w, y + 18, hovered ? 0x30FFFFFF : 0x18FFFFFF);
+		ctx.drawText(this.textRenderer, Text.literal((value ? "§f" : "§7") + label), x + 6, y + 5, 0xFFFFFFFF, true);
+		drawSwitch(ctx, x + w - 28, y + 4, value);
+		if (hovered && mouseClickedThisFrame) {
+			mouseClickedThisFrame = false;
+			playClick(this.client);
 			setter.accept(!value);
 			ForgeCalcConfig.save();
 		}

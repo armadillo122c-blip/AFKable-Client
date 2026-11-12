@@ -74,7 +74,10 @@ public class DevPostScreen extends FarmScreen {
 			return;
 		}
 		status = "§7Posting...";
-		ForgeOreCalculatorClient.INSTANCE.controlNet.publish("news:" + message);
+		if (!ForgeOreCalculatorClient.INSTANCE.controlNet.publish("news:" + message)) {
+			status = "§cNo dev key on this PC - nothing was posted.";
+			return;
+		}
 		ForgeOreCalculatorClient.INSTANCE.controlNet.forcePollSoon();
 		status = "§aPosted! Everyone sees it as a popup within ~45s.";
 		if (field != null) field.setText("");

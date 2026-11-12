@@ -21,6 +21,16 @@ repositories {
 loom {
 	splitEnvironmentSourceSets()
 
+	runs {
+		// gradlew runShots: dev-only screenshot run (DevShots), output in run/screenshots/afk-*.png
+		shots {
+			client()
+			name "Shots"
+			vmArg "-Dafkable.shots=true"
+			runDir "run"
+		}
+	}
+
 	mods {
 		"forge-ore-calculator" {
 			sourceSet sourceSets.main

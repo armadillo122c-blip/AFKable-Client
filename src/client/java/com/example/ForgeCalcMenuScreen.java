@@ -17,15 +17,13 @@ public class ForgeCalcMenuScreen extends FarmScreen {
 	private static final Tile[] TILES = {
 			new Tile("HUD", "§e", new ItemStack(Items.ITEM_FRAME)),
 			new Tile("CONFIG", "§a", new ItemStack(Items.COMPARATOR)),
-			new Tile("STOCK", "§6", new ItemStack(Items.BELL)),
 			new Tile("VAULTS", "§d", new ItemStack(Items.SPYGLASS)),
 			new Tile("GANG", "§b", new ItemStack(Items.WHITE_BANNER)),
 			new Tile("KEYS", "§c", new ItemStack(Items.TRIPWIRE_HOOK)),
 			new Tile("BUTTONS", "§6", new ItemStack(Items.OAK_BUTTON)),
 			new Tile("TRASH", "§c", new ItemStack(Items.LAVA_BUCKET)),
 			new Tile("STATS", "§b", new ItemStack(Items.PLAYER_HEAD)),
-			new Tile("ACTIVITY", "§b", new ItemStack(Items.WRITABLE_BOOK)),
-			new Tile("INFO", "§f", new ItemStack(Items.BOOK))
+			new Tile("UPGRADER", "§3", new ItemStack(Items.NETHER_STAR))
 	};
 
 	public ForgeCalcMenuScreen() {
@@ -36,6 +34,13 @@ public class ForgeCalcMenuScreen extends FarmScreen {
 	/** Long usernames would overflow the footer button, so clip them with an ellipsis. */
 	private static String fitName(String name) {
 		return name.length() > 12 ? name.substring(0, 11) + "…" : name;
+	}
+
+	private String fitText(String value, int width) {
+		if (this.textRenderer.getWidth(value) <= width) return value;
+		int end = value.length();
+		while (end > 0 && this.textRenderer.getWidth(value.substring(0, end)) > width) end--;
+		return end > 0 ? value.substring(0, end) + "…" : "";
 	}
 
 	@Override
@@ -51,8 +56,8 @@ public class ForgeCalcMenuScreen extends FarmScreen {
 		drawThemeBackdrop(ctx);
 		updateMouse();
 
-		int panelW = 300;
-		int panelH = 302;
+	int panelW = Math.min(340, this.width - 24);
+		int panelH = Math.min(300, this.height - 28);
 		int px = this.width / 2 - panelW / 2;
 		int py = this.height / 2 - panelH / 2;
 
@@ -64,11 +69,10 @@ public class ForgeCalcMenuScreen extends FarmScreen {
 			drawWoodPanel(ctx, px, py, panelW, panelH);
 		}
 
-		// header banner
-		ctx.fillGradient(px, py, px + panelW, py + 34, PLANK_DARK, blend(PLANK_DARK, 0xFF000000, 0.35f));
-		ctx.fill(px, py + 34, px + panelW, py + 35, GREEN);
-		ctx.drawCenteredTextWithShadow(this.textRenderer, TextFx.gradient("AFKABLE CLIENT", ForgeCalcTheme.current().gradFrom, ForgeCalcTheme.current().gradTo), px + panelW / 2, py + 8, CREAM);
-		ctx.drawCenteredTextWithShadow(this.textRenderer, Text.literal("§7by §fAFKartel §8- §7v" + DevLogsScreen.latestVersion()), px + panelW / 2, py + 20, 0xFFCBB088);
+		// header: discord chip, title block on the left, power switch on the right
+		ctx.drawText(this.textRenderer, Text.literal("§f§lAFKable Client"), px + 36, py + 8, 0xFFFFFFFF, true);
+		ctx.drawText(this.textRenderer, Text.literal("Mob Tycoon  ·  v" + DevLogsScreen.latestVersion()), px + 36, py + 20, 0xFF9FB2C8, false);
+		ctx.fill(px + 10, py + 34, px + panelW - 10, py + 35, 0x26FFFFFF);
 
 		// discord icon, header left
 		int dcSize = 24;
@@ -106,7 +110,12 @@ public class ForgeCalcMenuScreen extends FarmScreen {
 
 		// power switch, header right
 		boolean on = ForgeCalcConfig.clientEnabled;
-		if (drawBigButton(ctx, mouseX, mouseY, px + panelW - 62, py + 6, 56, 22, on ? "§a§lON" : "§c§lOFF", null)) {
+		int switchX = px + panelW - 34;
+		ctx.drawText(this.textRenderer, Text.literal(on ? "§fOn" : "§7Off"), switchX - 20, py + 13, 0xFFFFFFFF, false);
+		drawSwitch(ctx, switchX, py + 12, on);
+		if (hover(mouseX, mouseY, switchX - 22, py + 6, 50, 22) && mouseClickedThisFrame) {
+			mouseClickedThisFrame = false;
+			playClick(this.client);
 			ForgeCalcConfig.clientEnabled = !on;
 			ForgeCalcConfig.save();
 		}
@@ -118,11 +127,15 @@ public class ForgeCalcMenuScreen extends FarmScreen {
 			return;
 		}
 
-		// 3x2 tile grid
-		int cols = 4;
+		// Spacious two-column launcher cards make every section easy to hit and read.
+		int cols = 2;
 		int tileW = (panelW - 24 - (cols - 1) * 8) / cols;
-		int tileH = 62;
-		int gridY = py + 44;
+		// tiles shrink to whatever room is left above the footer, so short windows never overlap
+		int gridY = py + 43;
+		int tileRows = (TILES.length + cols - 1) / cols;
+		int room = (py + panelH - 38) - gridY;
+		int tileH = Math.max(20, Math.min(45, (room - (tileRows - 1) * 8) / tileRows));
+		boolean showSubtitle = tileH >= 32;
 
 		for (int i = 0; i < TILES.length; i++) {
 			Tile tile = TILES[i];
@@ -130,15 +143,29 @@ public class ForgeCalcMenuScreen extends FarmScreen {
 			int ty = gridY + (i / cols) * (tileH + 8);
 			boolean hovered = hover(mouseX, mouseY, tx, ty, tileW, tileH);
 
-			ctx.fill(tx - 1, ty - 1, tx + tileW + 1, ty + tileH + 1, hovered ? GREEN : BORDER);
-			ctx.fillGradient(tx, ty, tx + tileW, ty + tileH,
-					hovered ? blend(PLANK_LIGHT, GREEN, 0.25f) : PLANK_LIGHT,
-					hovered ? PLANK : PLANK_DARK);
-			ctx.fill(tx, ty, tx + tileW, ty + 2, hovered ? GREEN : blend(PLANK_LIGHT, 0xFFFFFFFF, 0.2f));
-
-			ctx.fill(tx + tileW / 2 - 12, ty + 8, tx + tileW / 2 + 12, ty + 32, 0x38000000);
-			ctx.drawItem(tile.icon(), tx + tileW / 2 - 8, ty + 12);
-			ctx.drawCenteredTextWithShadow(this.textRenderer, Text.literal(tile.color() + "§l" + tile.label()), tx + tileW / 2, ty + 40, CREAM);
+			drawGlass(ctx, tx, ty, tileW, tileH, hovered ? 0x30FFFFFF : 0x1CFFFFFF, hovered ? 0xC0FFFFFF : 0x70FFFFFF);
+			int chip = Math.min(20, tileH - 8);
+			int chipY = ty + (tileH - chip) / 2;
+			roundedFill(ctx, tx + 8, chipY, tx + 8 + chip, chipY + chip, 0x22FFFFFF);
+			ctx.drawItem(tile.icon(), tx + 8 + (chip - 16) / 2, chipY + (chip - 16) / 2);
+			String subtitle = switch (tile.label()) {
+				case "HUD" -> "Move and scale overlays";
+				case "CONFIG" -> "Tune client features";
+				case "VAULTS" -> "Search your storage";
+				case "GANG" -> "Gang tools and chat";
+				case "KEYS" -> "Set your shortcuts";
+				case "BUTTONS" -> "Choose quick actions";
+				case "TRASH" -> "Safe cleanup rules";
+				case "UPGRADER" -> "Buy upgrades for you";
+			default -> "Profile and badges";
+			};
+			int textX = tx + 16 + chip;
+			if (showSubtitle) {
+				ctx.drawText(this.textRenderer, Text.literal("§f§l" + fitText(tile.label(), tileW - 46)), textX, ty + tileH / 2 - 10, 0xFFFFFFFF, true);
+				ctx.drawText(this.textRenderer, Text.literal(fitText(subtitle, tileW - 46)), textX, ty + tileH / 2 + 3, 0xFFA9B8CC, false);
+			} else {
+				ctx.drawText(this.textRenderer, Text.literal("§f§l" + fitText(tile.label(), tileW - 46)), textX, ty + (tileH - 8) / 2, 0xFFFFFFFF, true);
+			}
 
 			if (hovered && mouseClickedThisFrame) {
 				mouseClickedThisFrame = false;
@@ -146,15 +173,13 @@ public class ForgeCalcMenuScreen extends FarmScreen {
 				switch (i) {
 					case 0 -> this.client.setScreen(new HudEditScreen(this));
 					case 1 -> this.client.setScreen(new ForgeCalcSettingsScreen(this));
-					case 2 -> this.client.setScreen(new StockNotifierScreen(this));
-					case 3 -> this.client.setScreen(new VaultSearchScreen(this));
-					case 4 -> this.client.setScreen(new GangChatScreen(this));
-					case 5 -> this.client.setScreen(new KeybindsScreen(this));
-					case 6 -> this.client.setScreen(new ButtonsScreen(this));
-					case 7 -> this.client.setScreen(new TrashScreen(this));
-					case 8 -> this.client.setScreen(new StatsScreen(this));
-					case 9 -> this.client.setScreen(new LiveActivityScreen(this));
-					case 10 -> this.client.setScreen(new ForgeCalcInfoScreen(this));
+					case 2 -> this.client.setScreen(new VaultSearchScreen(this));
+					case 3 -> this.client.setScreen(new GangChatScreen(this));
+					case 4 -> this.client.setScreen(new KeybindsScreen(this));
+					case 5 -> this.client.setScreen(new ButtonsScreen(this));
+					case 6 -> this.client.setScreen(new TrashScreen(this));
+					case 7 -> this.client.setScreen(new StatsScreen(this));
+					case 8 -> this.client.setScreen(new UpgradeAutoScreen(this));
 				}
 				return;
 			}
@@ -162,7 +187,7 @@ public class ForgeCalcMenuScreen extends FarmScreen {
 
 		// footer
 		int footY = py + panelH - 30;
-		ctx.fill(px, footY - 4, px + panelW, footY - 3, FRAME_DARK);
+		ctx.fill(px + 10, footY - 5, px + panelW - 10, footY - 4, 0x26FFFFFF);
 		int half = (panelW - 30) / 2;
 		if (drawBigButton(ctx, mouseX, mouseY, px + 12, footY, half, 20, "§e§lDEV LOGS", null)) {
 			this.client.setScreen(new DevLogsScreen(this));

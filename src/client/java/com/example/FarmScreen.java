@@ -610,10 +610,50 @@ public abstract class FarmScreen extends Screen {
 	public static int blend(int a, int b, float t) {
 		int ar = (a >> 16) & 0xFF, ag = (a >> 8) & 0xFF, ab = a & 0xFF;
 		int br = (b >> 16) & 0xFF, bg = (b >> 8) & 0xFF, bb = b & 0xFF;
-		return 0xFF000000
+		// Liquid Glass colours are see-through, so blend their alpha too; other themes stay opaque
+		int alpha = 0xFF;
+		if (ForgeCalcTheme.glass()) {
+			int aa = a >>> 24, ba = b >>> 24;
+			alpha = (int) (aa + (ba - aa) * t);
+		}
+		return (alpha << 24)
 				| ((int) (ar + (br - ar) * t) << 16)
 				| ((int) (ag + (bg - ag) * t) << 8)
 				| (int) (ab + (bb - ab) * t);
+	}
+
+	/** A filled rectangle with 2px-rounded corners. Rows never overlap, so see-through colours stay even. */
+	protected static void roundedFill(DrawContext ctx, int x1, int y1, int x2, int y2, int color) {
+		if (x2 - x1 < 4 || y2 - y1 < 4) {
+			ctx.fill(x1, y1, x2, y2, color);
+			return;
+		}
+		ctx.fill(x1 + 2, y1, x2 - 2, y1 + 1, color);
+		ctx.fill(x1 + 1, y1 + 1, x2 - 1, y1 + 2, color);
+		ctx.fill(x1, y1 + 2, x2, y2 - 2, color);
+		ctx.fill(x1 + 1, y2 - 2, x2 - 1, y2 - 1, color);
+		ctx.fill(x1 + 2, y2 - 1, x2 - 2, y2, color);
+	}
+
+	/**
+	 * One sheet of liquid glass: soft drop shadow, tinted see-through body, a sheen over the top
+	 * part, a bright specular top edge and dimmer sides. Everything behind it is already blurred
+	 * by the vanilla screen background, which is what sells the frosted look.
+	 */
+	protected static void drawGlass(DrawContext ctx, int x, int y, int w, int h, int body, int edge) {
+		int x2 = x + w, y2 = y + h;
+		roundedFill(ctx, x - 1, y + 1, x2 + 1, y2 + 3, 0x26000000);
+		roundedFill(ctx, x, y, x2, y2, body);
+		int sheen = Math.max(3, h * 2 / 5);
+		ctx.fillGradient(x + 1, y + 2, x2 - 1, y + 2 + sheen, 0x1FFFFFFF, 0x00FFFFFF);
+		// rim: bright top (light hits it), soft sides, faint bottom
+		ctx.fill(x + 2, y, x2 - 2, y + 1, edge);
+		ctx.fill(x + 1, y + 1, x + 2, y + 2, (edge >>> 25) << 24 | 0xFFFFFF);
+		ctx.fill(x2 - 2, y + 1, x2 - 1, y + 2, (edge >>> 25) << 24 | 0xFFFFFF);
+		ctx.fill(x, y + 2, x + 1, y2 - 2, 0x38FFFFFF);
+		ctx.fill(x2 - 1, y + 2, x2, y2 - 2, 0x24FFFFFF);
+		ctx.fill(x + 2, y2 - 1, x2 - 2, y2, 0x1CFFFFFF);
+		ctx.fill(x + 3, y + 1, x2 - 3, y + 2, 0x22FFFFFF);
 	}
 
 	public static void playClick(net.minecraft.client.MinecraftClient client) {
@@ -636,6 +676,7 @@ public abstract class FarmScreen extends Screen {
 			ctx.fill(x - 4, y - 4 + offset, x + w + 4, y + h + 4 + offset, (int) (0x40 * progress) << 24);
 		}
 		switch (ForgeCalcTheme.current().panelStyle()) {
+			case 4 -> drawGlass(ctx, x, y, w, h, PLANK, 0x99FFFFFF);
 			case 1 -> {
 				// flat modern card: thin accent border, dark gradient body
 				ctx.fill(x - 2, y - 2, x + w + 2, y + h + 2, FRAME_DARK);
@@ -683,24 +724,19 @@ public abstract class FarmScreen extends Screen {
 	protected boolean drawBigButton(DrawContext ctx, int mouseX, int mouseY, int x, int y, int w, int h, String label, String sub, ItemStack icon) {
 		boolean hovered = hover(mouseX, mouseY, x, y, w, h);
 		float anim = hoverAmount(x + ":" + y + ":" + label, hovered);
-		int top = blend(PLANK_LIGHT, GREEN, 0.35f * anim);
-		int bottom = blend(PLANK_DARK, PLANK, anim);
-		int grow = Math.round(anim);
-
-		ctx.fill(x - 2, y - 2, x + w + 2, y + h + 2, FRAME_DARK);
-		ctx.fill(x - 1 - grow, y - 1 - grow, x + w + 1 + grow, y + h + 1 + grow, blend(BORDER, GREEN_DARK, anim));
-		ctx.fillGradient(x, y, x + w, y + h, top, bottom);
-		ctx.fill(x, y, x + w, y + 2, blend(blend(PLANK_LIGHT, 0xFFFFFFFF, 0.25f), GREEN, anim));
-		ctx.fill(x, y + h - 2, x + w, y + h, blend(PLANK_DARK, 0xFF000000, 0.3f));
-		if (anim > 0.05f) {
-			// sheen sweeping across the hovered button
-			int sheenW = Math.max(2, (int) (w * 0.18f));
-			int sheenX = x + (int) ((w + sheenW) * ((System.currentTimeMillis() % 1400) / 1400f)) - sheenW;
-			int left = Math.max(x, sheenX);
-			int right = Math.min(x + w, sheenX + sheenW);
-			if (right > left) {
-				ctx.fill(left, y + 2, right, y + h - 2, ((int) (0x18 * anim) << 24) | 0xFFFFFF);
-			}
+		ForgeCalcTheme theme = ForgeCalcTheme.current();
+		if (ForgeCalcTheme.glass()) {
+			int alpha = 0x26 + (int) (0x1C * anim);
+			drawGlass(ctx, x, y, w, h, alpha << 24 | 0xFFFFFF, hovered ? 0xE0FFFFFF : 0x80FFFFFF);
+			if (anim > 0.05f) ctx.fill(x + 4, y + h - 2, x + w - 4, y + h - 1, (int) (0xC0 * anim) << 24 | (theme.accent & 0xFFFFFF));
+		} else {
+			int base = theme.panelBg | 0xFF000000;
+			int border = hovered ? theme.accent : theme.panelBorder;
+			int body = blend(base, theme.plankLight, 0.2f * anim);
+			ctx.fill(x - 1, y - 1, x + w + 1, y + h + 1, border);
+			ctx.fillGradient(x, y, x + w, y + h, body, blend(body, 0xFF000000, 0.18f));
+			ctx.fill(x, y, x + 2, y + h, theme.accent);
+			if (hovered) ctx.fill(x + 2, y + 1, x + w - 1, y + h - 1, 0x12FFFFFF);
 		}
 
 		int textX = x + w / 2;
@@ -708,9 +744,11 @@ public abstract class FarmScreen extends Screen {
 			ctx.drawItem(icon, x + 6, y + h / 2 - 8);
 			textX += 8;
 		}
-		ctx.drawCenteredTextWithShadow(this.textRenderer, Text.literal(label), textX, y + (sub == null ? (h - 8) / 2 : h / 2 - 10), CREAM);
+		int mainText = theme == ForgeCalcTheme.LIGHT ? 0xFF162033 : 0xFFF3F6FC;
+		int secondaryText = theme == ForgeCalcTheme.LIGHT ? 0xFF5C687A : 0xFF9BA8BB;
+		ctx.drawCenteredTextWithShadow(this.textRenderer, Text.literal(label), textX, y + (sub == null ? (h - 8) / 2 : h / 2 - 10), mainText);
 		if (sub != null) {
-			ctx.drawCenteredTextWithShadow(this.textRenderer, Text.literal(sub), textX, y + h / 2 + 2, 0xFFCBB088);
+			ctx.drawCenteredTextWithShadow(this.textRenderer, Text.literal(sub), textX, y + h / 2 + 2, secondaryText);
 		}
 
 		boolean clicked = hovered && mouseClickedThisFrame;
@@ -733,9 +771,13 @@ public abstract class FarmScreen extends Screen {
 		int x = Math.min(mouseX + 10, this.width - w - 4);
 		int y = Math.min(mouseY - h - 4 < 4 ? mouseY + 12 : mouseY - h - 4, this.height - h - 4);
 
-		ctx.fill(x - 2, y - 2, x + w + 2, y + h + 2, FRAME_DARK);
-		ctx.fill(x - 1, y - 1, x + w + 1, y + h + 1, BORDER);
-		ctx.fill(x, y, x + w, y + h, 0xF0241A10);
+		if (ForgeCalcTheme.glass()) {
+			drawGlass(ctx, x - 2, y - 2, w + 4, h + 4, 0xD00B111C, 0xA0FFFFFF);
+		} else {
+			ctx.fill(x - 2, y - 2, x + w + 2, y + h + 2, FRAME_DARK);
+			ctx.fill(x - 1, y - 1, x + w + 1, y + h + 1, BORDER);
+			ctx.fill(x, y, x + w, y + h, ForgeCalcTheme.current().panelBg | 0xF0000000);
+		}
 		int ty = y + 4;
 		for (String line : lines) {
 			ctx.drawText(this.textRenderer, Text.literal(line), x + 5, ty, 0xFFFFFFFF, true);
@@ -745,20 +787,63 @@ public abstract class FarmScreen extends Screen {
 
 	protected boolean drawToggleRow(DrawContext ctx, int mouseX, int mouseY, int x, int y, int w, String label, boolean value) {
 		boolean hovered = hover(mouseX, mouseY, x, y, w, 16);
-		ctx.fill(x, y, x + w, y + 16, hovered ? 0x40FFFFFF : 0x20000000);
-		ctx.drawText(this.textRenderer, Text.literal("§f" + label), x + 4, y + 4, 0xFFFFFFFF, true);
-
-		int pillW = 30;
-		int pillX = x + w - pillW - 3;
-		ctx.fill(pillX - 1, y + 2, pillX + pillW + 1, y + 14, FRAME_DARK);
-		ctx.fill(pillX, y + 3, pillX + pillW, y + 13, value ? GREEN_DARK : 0xFF6A3028);
-		ctx.drawCenteredTextWithShadow(this.textRenderer, Text.literal(value ? "§aON" : "§cOFF"), pillX + pillW / 2, y + 4, 0xFFFFFFFF);
+		roundedFill(ctx, x, y, x + w, y + 16, hovered ? 0x30FFFFFF : 0x18FFFFFF);
+		ctx.drawText(this.textRenderer, Text.literal("§f" + label), x + 5, y + 4, 0xFFFFFFFF, true);
+		drawSwitch(ctx, x + w - 25, y + 3, value);
 
 		boolean clicked = hovered && mouseClickedThisFrame;
 		if (clicked) {
 			mouseClickedThisFrame = false;
 			if (this.client != null) {
 				playClick(this.client);
+			}
+		}
+		return clicked;
+	}
+
+	// ---------- MODERN GLASS PIECES ----------
+
+	/** iOS-style switch, 22x10: accent track with the knob right when on, dim glass with it left when off. */
+	protected static void drawSwitch(DrawContext ctx, int x, int y, boolean on) {
+		int accent = ForgeCalcTheme.current().accent;
+		roundedFill(ctx, x, y, x + 22, y + 10, on ? (0xD0 << 24) | (accent & 0xFFFFFF) : 0x40FFFFFF);
+		int knob = on ? x + 13 : x + 1;
+		roundedFill(ctx, knob, y + 1, knob + 8, y + 9, 0xFFFFFFFF);
+	}
+
+	/**
+	 * Left-aligned screen header: title, optional grey subtitle on the right of it, a hairline divider.
+	 * Returns the y just below the divider.
+	 */
+	protected int drawHeader(DrawContext ctx, int px, int py, int panelW, String title, String subtitle) {
+		ctx.drawText(this.textRenderer, Text.literal("§f§l" + title), px + 12, py + 9, 0xFFFFFFFF, true);
+		if (subtitle != null) {
+			int tx = px + 18 + this.textRenderer.getWidth("§l" + title);
+			ctx.drawText(this.textRenderer, Text.literal(subtitle), tx, py + 9, 0xFF9FB2C8, false);
+		}
+		ctx.fill(px + 10, py + 24, px + panelW - 10, py + 25, 0x26FFFFFF);
+		return py + 25;
+	}
+
+	/** Segmented control: one glass track, the active segment a brighter pill. Returns the clicked index or -1. */
+	protected int drawSegmented(DrawContext ctx, int mouseX, int mouseY, int x, int y, int w, int h, String[] labels, int active) {
+		drawGlass(ctx, x, y, w, h, 0x1AFFFFFF, 0x50FFFFFF);
+		int segW = (w - 4) / labels.length;
+		int clicked = -1;
+		for (int i = 0; i < labels.length; i++) {
+			int sx = x + 2 + i * segW;
+			boolean hovered = hover(mouseX, mouseY, sx, y, segW, h);
+			if (i == active) {
+				drawGlass(ctx, sx, y + 2, segW, h - 4, 0x3CFFFFFF, 0xB0FFFFFF);
+			} else if (hovered) {
+				roundedFill(ctx, sx, y + 2, sx + segW, y + h - 2, 0x14FFFFFF);
+			}
+			ctx.drawCenteredTextWithShadow(this.textRenderer, Text.literal((i == active ? "§f§l" : "§7") + labels[i]),
+					sx + segW / 2, y + (h - 8) / 2, 0xFFFFFFFF);
+			if (hovered && mouseClickedThisFrame && i != active) {
+				mouseClickedThisFrame = false;
+				if (this.client != null) playClick(this.client);
+				clicked = i;
 			}
 		}
 		return clicked;
